@@ -153,12 +153,14 @@ animal = st.selectbox(
 
 if st.button("🔍 Explore Animal"):
 
-    info = animals[animal]
-        if animal == "Panda":
-        st.image(
-            "https://commons.wikimedia.org/wiki/Special:FilePath/Giant%20panda%20animal.jpg",
-            caption="Giant Panda"
+ info = animals[animal]
+ if animal == "Panda":
+     st.image(
+"https://commons.wikimedia.org/wiki/Special:FilePath/Giant%20panda%20animal.jpg",
+     caption="Giant Panda"
         )
+
+    st.header(info["emoji"] + " " + animal)
 
     st.header(info["emoji"] + " " + animal)
 
