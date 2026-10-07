@@ -1,48 +1,60 @@
 import streamlit as st
-from sklearn.tree import DecisionTreeClassifier
 
-features = [
-    [4, 1, 0, 4],
-    [20, 1, 0, 4],
-    [5, 0, 1, 2],
-    [500, 0, 0, 4],
-    [190, 1, 0, 4],
-    [220, 1, 0, 4],
-    [400, 1, 0, 4],
-    [450, 1, 0, 4],
-    [8, 1, 0, 2],
-    [2, 1, 0, 4]
-]
+st.title("🐾 Animal Explorer")
+st.write("Choose an animal to learn about it!")
 
-labels = [
-    "Cat", "Dog", "Eagle", "Elephant", "Lion",
-    "Tiger", "Horse", "Cow", "Monkey", "Rabbit"
-]
+animals = {
+    "Dog": {
+        "emoji": "🐶",
+        "fact": "Dogs are domesticated mammals and are known for their strong bond with humans."
+    },
+    "Cat": {
+        "emoji": "🐱",
+        "fact": "Cats are small mammals known for their agility, sharp senses, and independent behavior."
+    },
+    "Lion": {
+        "emoji": "🦁",
+        "fact": "Lions are large social cats that live mainly in grasslands and savannas."
+    },
+    "Tiger": {
+        "emoji": "🐯",
+        "fact": "Tigers are large striped cats and are excellent swimmers."
+    },
+    "Elephant": {
+        "emoji": "🐘",
+        "fact": "Elephants are the largest living land animals and use their trunks for many tasks."
+    },
+    "Horse": {
+        "emoji": "🐴",
+        "fact": "Horses are strong mammals that have been domesticated by humans for thousands of years."
+    },
+    "Giraffe": {
+        "emoji": "🦒",
+        "fact": "Giraffes are the tallest living land animals."
+    },
+    "Panda": {
+        "emoji": "🐼",
+        "fact": "Giant pandas mainly eat bamboo and are native to China."
+    },
+    "Monkey": {
+        "emoji": "🐒",
+        "fact": "Monkeys are intelligent primates with many different species found around the world."
+    },
+    "Zebra": {
+        "emoji": "🦓",
+        "fact": "Zebras are African mammals famous for their distinctive black-and-white stripes."
+    }
+}
 
-model = DecisionTreeClassifier()
-model.fit(features, labels)
-
-st.title("🐾 Animal Predictor")
-
-weight = st.number_input("Animal weight (kg)", min_value=0.1, value=5.0)
-
-fur = st.selectbox("Does it have fur?", ["Yes", "No"])
-
-flies = st.selectbox("Can it fly?", ["Yes", "No"])
-
-legs = st.number_input(
-    "Number of legs",
-    min_value=0,
-    max_value=8,
-    value=4
+animal = st.selectbox(
+    "Which animal do you want to learn about?",
+    list(animals.keys())
 )
 
-if st.button("Predict"):
-    fur_value = 1 if fur == "Yes" else 0
-    flies_value = 1 if flies == "Yes" else 0
+if st.button("Learn About Animal"):
 
-    prediction = model.predict(
-        [[weight, fur_value, flies_value, legs]]
-    )
+    info = animals[animal]
 
-    st.success("Prediction: " + prediction[0]) 
+    st.header(info["emoji"] + " " + animal)
+
+    st.write(info["fact"]) 
