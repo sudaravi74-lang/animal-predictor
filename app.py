@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 
 st.title("🐾 Animal Encyclopedia")
 st.write("Choose an animal to explore its body, habitat, diet and more!")
@@ -7,25 +7,25 @@ animals = {
 
     "Dog": {
         "emoji": "🐶",
-        "appearance": "Dogs have four legs, paws, a tail, fur, and a wide variety of body shapes.",
-        "colour": "Many colours including black, white, brown, golden, grey and mixed patterns.",
+        "appearance": "Dogs have four legs, paws, a tail, fur, and many different body shapes.",
+        "colour": "Black, white, brown, golden, grey and many mixed patterns.",
         "body": "Four legs with paws, a flexible spine, tail, ears and a strong sense of smell.",
         "region": "Domestic dogs are found almost everywhere in the world.",
         "habitat": "Human homes, farms, towns and cities.",
-        "diet": "Omnivorous; dogs can eat a variety of animal and plant-based foods.",
+        "diet": "Omnivorous; dogs can eat both animal and plant-based foods.",
         "size": "Highly variable depending on breed.",
         "weight": "Roughly 1.5–90+ kg depending on breed.",
-        "lifespan": "Often around 10–13 years, depending on breed and health.",
+        "lifespan": "Often around 10–13 years.",
         "fact": "Dogs have an exceptionally strong sense of smell."
     },
 
     "Cat": {
         "emoji": "🐱",
         "appearance": "Cats have a compact body, four legs, paws, a tail, whiskers and retractable claws.",
-        "colour": "White, black, orange, grey, brown and many combinations and patterns.",
+        "colour": "White, black, orange, grey, brown and many combinations.",
         "body": "Four legs, padded paws, flexible spine, tail, whiskers and sharp claws.",
         "region": "Domestic cats are found throughout the world.",
-        "habitat": "Homes, farms, towns, cities and some outdoor environments.",
+        "habitat": "Homes, farms, towns, cities and outdoor environments.",
         "diet": "Carnivorous; cats naturally depend heavily on animal-based food.",
         "size": "Usually around 45–50 cm long, excluding the tail.",
         "weight": "Often around 3–6 kg.",
@@ -36,21 +36,21 @@ animals = {
     "Lion": {
         "emoji": "🦁",
         "appearance": "Lions have muscular bodies, four legs, a long tail and a large head.",
-        "colour": "Usually tan, golden or brownish, with some variation.",
+        "colour": "Usually tan, golden or brownish.",
         "body": "Four powerful legs, paws, claws, large teeth and a long tail. Adult males usually have a mane.",
         "region": "Mainly sub-Saharan Africa, with a small wild population in India.",
         "habitat": "Grasslands, savannas and open woodland.",
         "diet": "Carnivorous; mainly large and medium-sized mammals.",
         "size": "Large cat; males are generally larger than females.",
-        "weight": "Adult weight varies considerably, often around 120–250 kg.",
+        "weight": "Often around 120–250 kg.",
         "lifespan": "Wild lions often live around 10–15 years.",
-        "fact": "Lions are the only big cats that normally live in social groups called prides."
+        "fact": "Lions normally live in social groups called prides."
     },
 
     "Tiger": {
         "emoji": "🐯",
         "appearance": "Tigers have a large muscular body, four legs, a long tail and a striped coat.",
-        "colour": "Orange or reddish-orange with dark stripes and a lighter underside.",
+        "colour": "Orange or reddish-orange with dark stripes.",
         "body": "Four powerful legs, large paws, claws, strong jaws and a long tail.",
         "region": "Parts of Asia, including India, Russia and Southeast Asia.",
         "habitat": "Forests, grasslands, wetlands and other suitable habitats.",
@@ -78,13 +78,13 @@ animals = {
     "Horse": {
         "emoji": "🐴",
         "appearance": "Horses have a large body, four long legs, hooves, a mane and a tail.",
-        "colour": "Black, brown, chestnut, grey, white and many other patterns.",
+        "colour": "Black, brown, chestnut, grey, white and many patterns.",
         "body": "Four legs ending in hooves, a mane along the neck and a long tail.",
         "region": "Domestic horses are found worldwide.",
         "habitat": "Grasslands, farms, plains and human-managed environments.",
         "diet": "Herbivorous; mainly grasses and other plant material.",
         "size": "Varies greatly among breeds.",
-        "weight": "Often around 400–600 kg, with some breeds outside this range.",
+        "weight": "Often around 400–600 kg.",
         "lifespan": "Often around 25–30 years.",
         "fact": "Horses can sleep both standing up and lying down."
     },
@@ -98,7 +98,7 @@ animals = {
         "habitat": "Savannas, grasslands and open woodlands.",
         "diet": "Herbivorous; mainly leaves from trees and shrubs.",
         "size": "The tallest living land animals.",
-        "weight": "Often around 800–1,200 kg, with males generally heavier.",
+        "weight": "Often around 800–1,200 kg.",
         "lifespan": "Often around 20–25 years in the wild.",
         "fact": "A giraffe's long neck helps it reach vegetation high above the ground."
     },
@@ -114,12 +114,12 @@ animals = {
         "size": "About 1.2–1.9 metres long.",
         "weight": "Adults commonly weigh around 70–120 kg.",
         "lifespan": "Often around 15–20 years in the wild.",
-        "fact": "Pandas have a specialized wrist bone that works somewhat like an extra thumb for holding bamboo."
+        "fact": "Pandas have a specialized wrist bone that helps them hold bamboo."
     },
 
     "Monkey": {
         "emoji": "🐒",
-        "appearance": "Monkeys have four limbs, a head, a torso, a tail in many species and grasping hands or feet.",
+        "appearance": "Monkeys have four limbs, a head, torso and often a tail.",
         "colour": "Extremely variable depending on species.",
         "body": "Four limbs, grasping hands and feet, and often a tail.",
         "region": "Africa, Asia, Central America and South America depending on species.",
@@ -128,15 +128,15 @@ animals = {
         "size": "Ranges from very small species to much larger monkeys.",
         "weight": "Highly variable by species.",
         "lifespan": "Varies greatly by species.",
-        "fact": "Monkeys are highly diverse, with many different species and adaptations."
+        "fact": "Monkeys are highly diverse, with many different species."
     },
 
     "Zebra": {
         "emoji": "🦓",
-        "appearance": "Zebras have horse-like bodies, four legs, hooves, upright manes and distinctive stripes.",
+        "appearance": "Zebras have horse-like bodies, four legs, hooves, upright manes and stripes.",
         "colour": "Black-and-white striped coat.",
         "body": "Four legs ending in hooves, a mane, tail and strong teeth adapted for grazing.",
-        "region": "Eastern and southern Africa, depending on the species.",
+        "region": "Eastern and southern Africa, depending on species.",
         "habitat": "Grasslands, savannas and some woodland areas.",
         "diet": "Herbivorous; mainly grasses and other vegetation.",
         "size": "Medium-to-large hoofed mammals.",
@@ -146,21 +146,22 @@ animals = {
     }
 }
 
+
 animal = st.selectbox(
     "Which animal do you want to learn about?",
     list(animals.keys())
 )
 
+
 if st.button("🔍 Explore Animal"):
 
- info = animals[animal]
- if animal == "Panda":
-     st.image(
-"https://commons.wikimedia.org/wiki/Special:FilePath/Giant%20panda%20animal.jpg",
-     caption="Giant Panda"
-        )
+    info = animals[animal]
 
-    st.header(info["emoji"] + " " + animal)
+    if animal == "Panda":
+        st.image(
+            "https://commons.wikimedia.org/wiki/Special:FilePath/Giant%20panda%20animal.jpg",
+            caption="Giant Panda"
+        )
 
     st.header(info["emoji"] + " " + animal)
 
