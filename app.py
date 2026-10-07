@@ -1,4 +1,4 @@
- import streamlit as st
+import streamlit as st 
 
 st.title("🐾 Animal Encyclopedia")
 st.write("Choose an animal to explore its body, habitat, diet and more!")
