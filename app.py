@@ -752,7 +752,6 @@ if observations:
 taxon_id = (
         taxon.get("id")
     )
-
  if taxon_id:
 
         inat_url = (
