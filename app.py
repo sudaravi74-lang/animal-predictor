@@ -670,242 +670,45 @@ def show_species_page(
                 photo_urls,
                 use_container_width=True
             )
-            
 # =========================================================
-# HOME PAGE — GOGY & TITLI
+# HOME PAGE
 # =========================================================
 
 def show_home():
 
-    # =====================================================
-    # HOME PAGE STYLING
-    # =====================================================
+    st.title("🌍 Nature Encyclopedia AI")
 
-    st.markdown(
-        """
-        <style>
-
-        .nature-hero {
-            text-align: center;
-            padding: 18px 10px 8px 10px;
-        }
-
-        .nature-hero-title {
-            font-size: 38px;
-            font-weight: 800;
-            margin-bottom: 4px;
-        }
-
-        .nature-hero-subtitle {
-            font-size: 17px;
-            opacity: 0.75;
-        }
-
-        .character-card {
-            text-align: center;
-            padding: 22px 15px 20px 15px;
-            border-radius: 28px;
-            min-height: 245px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(235,250,255,0.95),
-                    rgba(250,248,255,0.95)
-                );
-
-            border: 1px solid rgba(120,160,190,0.20);
-
-            box-shadow:
-                0 8px 25px
-                rgba(0,0,0,0.07);
-        }
-
-        .gogy {
-            font-size: 82px;
-            display: inline-block;
-
-            animation:
-                gogyFloat 2.2s ease-in-out infinite;
-        }
-
-        .titli {
-            font-size: 78px;
-            display: inline-block;
-
-            animation:
-                titliFloat 2s ease-in-out infinite;
-        }
-
-        @keyframes gogyFloat {
-
-            0% {
-                transform:
-                    translateY(0px)
-                    rotate(-2deg);
-            }
-
-            50% {
-                transform:
-                    translateY(-12px)
-                    rotate(2deg);
-            }
-
-            100% {
-                transform:
-                    translateY(0px)
-                    rotate(-2deg);
-            }
-        }
-
-        @keyframes titliFloat {
-
-            0% {
-                transform:
-                    translateY(0px)
-                    rotate(2deg);
-            }
-
-            50% {
-                transform:
-                    translateY(-10px)
-                    rotate(-3deg);
-            }
-
-            100% {
-                transform:
-                    translateY(0px)
-                    rotate(2deg);
-            }
-        }
-
-        .character-name {
-            font-size: 25px;
-            font-weight: 800;
-            margin-top: 5px;
-        }
-
-        .character-description {
-            font-size: 16px;
-            line-height: 1.5;
-            margin-top: 8px;
-        }
-
-        .question-title {
-            text-align: center;
-            font-size: 27px;
-            font-weight: 750;
-            margin-top: 24px;
-        }
-
-        .question-subtitle {
-            text-align: center;
-            opacity: 0.7;
-            margin-bottom: 12px;
-        }
-
-        .butterfly {
-            display: inline-block;
-
-            animation:
-                butterflyFly 3s
-                ease-in-out infinite;
-        }
-
-        @keyframes butterflyFly {
-
-            0% {
-                transform:
-                    translate(0px, 0px)
-                    rotate(-5deg);
-            }
-
-            50% {
-                transform:
-                    translate(15px, -8px)
-                    rotate(7deg);
-            }
-
-            100% {
-                transform:
-                    translate(0px, 0px)
-                    rotate(-5deg);
-            }
-        }
-
-        </style>
-        """,
-        unsafe_allow_html=True
+    st.subheader(
+        "Explore the living world with Gogy & Titli 🦋"
     )
 
-
-    # =====================================================
-    # HEADER
-    # =====================================================
-
-    st.markdown(
-        """
-        <div class="nature-hero">
-
-            <div class="nature-hero-title">
-                🌍 Nature Encyclopedia AI
-            </div>
-
-            <div class="nature-hero-subtitle">
-                Explore the living world
-                with your AI nature companions
-                <span class="butterfly">🦋</span>
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.write(
+        "Ask a question, search for an organism, "
+        "or identify something from a photograph."
     )
 
+    st.divider()
 
     # =====================================================
-    # GOGY + TITLI
+    # GOGY AND TITLI
     # =====================================================
 
-    gogy_col, titli_col = st.columns(
-        2,
-        gap="large"
-    )
+    col1, col2 = st.columns(2)
 
+    with col1:
 
-    # =====================================================
-    # GOGY
-    # =====================================================
+        st.markdown("## 🧒 Gogy")
 
-    with gogy_col:
-
-        st.markdown(
-            """
-            <div class="character-card">
-
-                <div class="gogy">
-                    🧒👋
-                </div>
-
-                <div class="character-name">
-                    Gogy
-                </div>
-
-                <div class="character-description">
-                    “Hiii! I'm Gogy! 😄<br>
-                    Hmm... what are you curious about?”
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
+        st.write(
+            "👋 Hi! I'm Gogy! "
+            "I love discovering how nature works."
         )
 
         if st.button(
-            "🎤 Talk to Gogy",
+            "💬 Talk to Gogy",
             type="primary",
             use_container_width=True,
-            key="home_talk_gogy"
+            key="talk_to_gogy"
         ):
 
             st.session_state.active_character = "gogy"
@@ -916,39 +719,19 @@ def show_home():
 
             st.rerun()
 
+    with col2:
 
-    # =====================================================
-    # TITLI
-    # =====================================================
+        st.markdown("## 👧🦋 Titli")
 
-    with titli_col:
-
-        st.markdown(
-            """
-            <div class="character-card">
-
-                <div class="titli">
-                    👧🦋
-                </div>
-
-                <div class="character-name">
-                    Titli
-                </div>
-
-                <div class="character-description">
-                    “Hiii! I'm Titli! 🦋<br>
-                    Ooooh! What shall we discover?”
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
+        st.write(
+            "🦋 Hiii! I'm Titli! "
+            "Ooooh! Let's discover something amazing!"
         )
 
         if st.button(
-            "🎤 Talk to Titli",
+            "💬 Talk to Titli",
             use_container_width=True,
-            key="home_talk_titli"
+            key="talk_to_titli"
         ):
 
             st.session_state.active_character = "titli"
@@ -959,214 +742,154 @@ def show_home():
 
             st.rerun()
 
+    st.divider()
 
     # =====================================================
     # SEARCH
     # =====================================================
 
-    st.markdown(
-        """
-        <div class="question-title">
-            🔎 What do you want to know?
-        </div>
+    st.header("🔎 What do you want to know?")
 
-        <div class="question-subtitle">
-            Search for an animal, plant, or other organism.
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    with st.form("home_search_form"):
 
-
-    with st.form(
-        "nature_home_search"
-    ):
-
-        home_search = st.text_input(
-            "Search",
+        search_name = st.text_input(
+            "Search organism",
             placeholder=(
-                "Tiger, butterfly, frog, neem..."
-            ),
-            label_visibility="collapsed"
+                "Tiger, frog, butterfly, neem..."
+            )
         )
 
-        search_button = st.form_submit_button(
+        submitted = st.form_submit_button(
             "🔎 Explore Nature",
-            use_container_width=True,
-            type="primary"
+            use_container_width=True
         )
 
+    if submitted:
 
-    # =====================================================
-    # SEARCH ACTION
-    # =====================================================
-
-    if search_button:
-
-        if not home_search.strip():
+        if not search_name.strip():
 
             st.warning(
-                "Gogy: “Hmm... tell me what you "
-                "want to discover! 😄”"
+                "Please enter an animal or plant."
             )
 
         else:
 
             st.session_state.search_name = (
-                home_search.strip()
+                search_name.strip()
             )
 
             with st.spinner(
-                "🌿 Looking through the living world..."
+                "🌿 Finding this organism..."
             ):
 
                 taxon = search_taxon_cached(
-                    home_search.strip()
+                    search_name.strip()
                 )
 
+                if (
+                    taxon
+                    and not taxon.get("error")
+                ):
 
-            if (
-                taxon
-                and not taxon.get("error")
-            ):
+                    taxon_id = taxon.get("id")
 
-                taxon_id = taxon.get("id")
+                    observations = []
 
-                observations = []
+                    if taxon_id:
 
-
-                if taxon_id:
-
-                    observations = (
-                        get_observations_cached(
-                            taxon_id
+                        observations = (
+                            get_observations_cached(
+                                taxon_id
+                            )
                         )
+
+                    st.session_state.selected_taxon = (
+                        taxon
                     )
 
+                    st.session_state.selected_observations = (
+                        observations
+                    )
 
-                st.session_state.selected_taxon = (
+                    st.session_state.page = "search"
+
+                    st.rerun()
+
+                elif (
                     taxon
-                )
+                    and taxon.get("error")
+                ):
 
-                st.session_state.selected_observations = (
-                    observations
-                )
+                    st.error(
+                        "iNaturalist error: "
+                        + str(taxon["error"])
+                    )
 
-                st.session_state.page = "search"
+                else:
 
-                st.rerun()
+                    st.warning(
+                        "I couldn't find that organism."
+                    )
 
-
-            elif (
-                taxon
-                and taxon.get("error")
-            ):
-
-                st.error(
-                    "iNaturalist error: "
-                    + str(taxon["error"])
-                )
-
-
-            else:
-
-                st.warning(
-                    "Awww... we couldn't find that "
-                    "organism. Try another name! 🦋"
-                )
-
+    st.divider()
 
     # =====================================================
     # OTHER OPTIONS
     # =====================================================
 
-    st.divider()
+    col1, col2 = st.columns(2)
 
+    with col1:
 
-    option1, option2 = st.columns(
-        2,
-        gap="large"
-    )
+        st.subheader("🌿 Explore Flora & Fauna")
 
+        st.write(
+            "Search animals and plants and "
+            "explore biodiversity information."
+        )
 
-    # =====================================================
-    # EXPLORE
-    # =====================================================
-
-    with option1:
-
-        with st.container(
-            border=True
+        if st.button(
+            "Explore Flora & Fauna",
+            use_container_width=True,
+            key="explore_home"
         ):
 
-            st.subheader(
-                "🌿 Explore Flora & Fauna"
-            )
+            st.session_state.page = "search"
 
-            st.write(
-                "Search animals and plants "
-                "and explore biodiversity information."
-            )
+            st.session_state.search_name = ""
 
-            if st.button(
-                "Explore Flora & Fauna",
-                use_container_width=True,
-                key="home_explore_nature"
-            ):
+            st.session_state.selected_taxon = None
 
-                st.session_state.page = "search"
+            st.session_state.selected_observations = []
 
-                st.session_state.search_name = ""
+            st.rerun()
 
-                st.session_state.selected_taxon = None
+    with col2:
 
-                st.session_state.selected_observations = []
+        st.subheader("📷 Identify from Photo")
 
-                st.rerun()
+        st.write(
+            "Upload a photograph and let AI "
+            "identify the organism."
+        )
 
-
-    # =====================================================
-    # PHOTO IDENTIFICATION
-    # =====================================================
-
-    with option2:
-
-        with st.container(
-            border=True
+        if st.button(
+            "Identify from Photo",
+            use_container_width=True,
+            key="identify_home"
         ):
 
-            st.subheader(
-                "📷 Identify from Photo"
-            )
+            st.session_state.page = "identify"
 
-            st.write(
-                "Upload a photograph and let AI "
-                "investigate the organism."
-            )
-
-            if st.button(
-                "Identify from Photo",
-                use_container_width=True,
-                key="home_identify_photo"
-            ):
-
-                st.session_state.page = "identify"
-
-                st.rerun()
-
-
-    # =====================================================
-    # FOOTER
-    # =====================================================
+            st.rerun()
 
     st.divider()
 
     st.caption(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
-        )
-
- 
+    )                                          
+                 
     # =========================================================
 # SEARCH PAGE
 # =========================================================
