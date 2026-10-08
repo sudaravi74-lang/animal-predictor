@@ -893,84 +893,7 @@ def show_home():
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
     ) 
-# =========================================================
-# AUDIO + CHARACTER VOICES
-# =========================================================
-
- def prepare_audio(audio_bytes, character):
-    if not audio_bytes:
-        return
-    st.session_state.last_audio = audio_bytes
-    st.session_state.audio_character = character
-
-
-def play_character_audio():
-    audio_bytes = st.session_state.get("last_audio")
-    if audio_bytes and st.session_state.get("audio_enabled", True):
-        st.audio(audio_bytes, format="audio/mp3")
-
-
-def generate_titli_voice(text):
-    """SpeechGen dynamic TTS. Configure the three secrets to enable it."""
-    try:
-        token = st.secrets["SPEECHGEN_TOKEN"]
-        email = st.secrets["SPEECHGEN_EMAIL"]
-        voice = st.secrets["SPEECHGEN_VOICE_TITLI"]
-    except Exception:
-        return None
-
-    try:
-        r = requests.post(
-            "https://speechgen.io/index.php?r=api/text",
-            data={
-                "token": token,
-                "email": email,
-                "voice": voice,
-                "text": text[:2000],
-                "format": "mp3",
-                "speed": 1,
-            },
-            timeout=60,
-        )
-        if "audio" in r.headers.get("content-type", "").lower():
-            return r.content
-    except Exception:
-        pass
-    return None
-
-
-def generate_gogy_voice(text):
-    # AI Two has a web Voice Studio, but this code does not invent
-    # an unofficial API endpoint. Connect an official API here later.
-    return None
-
-
-def generate_character_voice(character, text):
-    if character == "titli":
-        return generate_titli_voice(text)
-    if character == "gogy":
-        return generate_gogy_voice(text)
-    return None
-
-
-# =========================================================
-# GOGY & TITLI AI CONVERSATION
-# =========================================================
-
-def ask_character_ai(character, user_message):
-    if gemini_client is None:
-        return "I'm sorry! My AI brain isn't connected right now. Please check the Gemini API key."
-
-    if character == "titli":
-        personality = """
-You are Titli, a young female nature companion.
-Personality: sweet, curious, expressive, slightly mischievous, friendly, and scientifically accurate.
-Use occasional cute expressions such as Ooooh!, Hehe!, Wow!, Hmph!, or Wait wait!, but do not overuse them.
-Gently correct scientific mistakes. Do not blindly agree. Keep answers short, natural and easy to understand.
-"""
-    else:
-        personality = """
-You are Gogy, a young male nature companion.
+ You are Gogy, a young male nature companion.
 Personality: curious, friendly, playful, calm and slightly more mature than Titli.
 Use occasional expressions such as Hmm..., Oh!, Wait a second..., Whoa!, or Interesting!, but do not overuse them.
 Gently correct scientific mistakes. Do not blindly agree. Keep answers short, natural and easy to understand.
@@ -1048,7 +971,7 @@ def show_conversation():
     )
 
 
-# =========================================================
+ # =========================================================
 # SIDEBAR
 # =========================================================
 
@@ -1200,8 +1123,9 @@ def show_search():
 
                 st.warning(
                     "No matching organism was found."
-			    )
-		# =====================================================
+                )
+
+    # =====================================================
     # SHOW SPECIES
     # =====================================================
 
@@ -1545,4 +1469,3 @@ elif st.session_state.page == "identify":
     show_identify()
 elif st.session_state.page == "conversation":
     show_conversation()
-	    
