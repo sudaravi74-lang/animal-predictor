@@ -8,12 +8,12 @@ from google import genai
 
 
 # =========================================================
-# PAGE
+# PAGE CONFIGURATION
 # =========================================================
 
 st.set_page_config(
-    page_title="Animal Encyclopedia AI",
-    page_icon="🐾",
+    page_title="Nature Encyclopedia AI",
+    page_icon="🌍",
     layout="wide"
 )
 
@@ -24,39 +24,67 @@ st.set_page_config(
 
 defaults = {
     "page": "home",
+
+    # Identification
     "image_bytes": None,
     "image_hash": None,
     "ai_result": None,
     "ai_model_used": None,
-    "database_taxon": None,
-    "database_observations": [],
-    "database_loaded": False,
+
+    # Species
+    "selected_taxon": None,
+    "selected_observations": [],
+    "species_info": None,
+    "species_info_loaded": False,
+
+    # Search
+    "search_name": "",
+
+    # Home images
+    "home_animal_image": None,
+    "home_plant_image": None,
 }
 
 for key, value in defaults.items():
+
     if key not in st.session_state:
         st.session_state[key] = value
 
 
 # =========================================================
-# iNATURALIST
+# iNATURALIST API
 # =========================================================
 
-TAXA_URL = "https://api.inaturalist.org/v1/taxa/autocomplete"
+INAT_TAXA_URL = (
+    "https://api.inaturalist.org/v1/taxa/autocomplete"
+)
 
-OBSERVATIONS_URL = "https://api.inaturalist.org/v1/observations"
+INAT_OBSERVATIONS_URL = (
+    "https://api.inaturalist.org/v1/observations"
+)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def search_taxon_cached(animal_name):
+# =========================================================
+# iNATURALIST TAXON SEARCH
+# =========================================================
+
+@st.cache_data(
+    ttl=3600,
+    show_spinner=False
+)
+def search_taxon_cached(search_name):
 
     try:
 
         response = requests.get(
-            TAXA_URL,
+            INAT_TAXA_URL,
             params={
-                "q": animal_name,
+                "q": search_name,
                 "per_page": 10
+            },
+            headers={
+                "User-Agent":
+                "Nature-Encyclopedia-AI/1.0"
             },
             timeout=15
         )
@@ -71,29 +99,35 @@ def search_taxon_cached(animal_name):
         if not results:
             return None
 
-        search_name = animal_name.lower().strip()
+        search_lower = (
+            search_name
+            .strip()
+            .lower()
+        )
 
-        # Prefer exact common/scientific name
+        # First try exact common/scientific match
         for taxon in results:
 
-            common = (
+            common_name = (
                 taxon.get(
                     "preferred_common_name"
                 )
                 or ""
             ).lower()
 
-            scientific = (
+            scientific_name = (
                 taxon.get("name")
                 or ""
             ).lower()
 
             if (
-                common == search_name
-                or scientific == search_name
+                common_name == search_lower
+                or scientific_name == search_lower
             ):
+
                 return taxon
 
+        # Otherwise return best result
         return results[0]
 
     except Exception as e:
@@ -103,13 +137,20 @@ def search_taxon_cached(animal_name):
         }
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+# =========================================================
+# iNATURALIST OBSERVATIONS
+# =========================================================
+
+@st.cache_data(
+    ttl=3600,
+    show_spinner=False
+)
 def get_observations_cached(taxon_id):
 
     try:
 
         response = requests.get(
-            OBSERVATIONS_URL,
+            INAT_OBSERVATIONS_URL,
             params={
                 "taxon_id": taxon_id,
                 "photos": "true",
@@ -117,6 +158,10 @@ def get_observations_cached(taxon_id):
                 "order_by": "votes",
                 "order": "desc",
                 "per_page": 6
+            },
+            headers={
+                "User-Agent":
+                "Nature-Encyclopedia-AI/1.0"
             },
             timeout=20
         )
@@ -129,8 +174,13 @@ def get_observations_cached(taxon_id):
         )
 
     except Exception:
+
         return []
 
+
+# =========================================================
+# iNATURALIST PHOTO
+# =========================================================
 
 def get_large_photo_url(photo):
 
@@ -161,12 +211,14 @@ def get_large_photo_url(photo):
 
 
 # =========================================================
-# GEMINI
+# GEMINI SETUP
 # =========================================================
 
 try:
 
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    GEMINI_API_KEY = st.secrets[
+        "GEMINI_API_KEY"
+    ]
 
     gemini_client = genai.Client(
         api_key=GEMINI_API_KEY
@@ -177,12 +229,24 @@ except Exception:
     gemini_client = None
 
 
+# =========================================================
+# GEMINI MODELS
+# =========================================================
+#
+# We use the current stable Flash models.
+# If 3.8 is temporarily unavailable,
+# the app can try 3.7.
+# =========================================================
+
 GEMINI_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-3.6-flash",
 ]
 
+
+# =========================================================
+# IDENTIFY ANIMAL OR PLANT
+# =========================================================
 
 def identify_with_model(
     image_bytes,
@@ -194,24 +258,35 @@ def identify_with_model(
     )
 
     prompt = """
-Identify the animal in this image.
+Look carefully at this image.
 
-Return ONLY valid JSON:
+Identify the main living organism.
+
+It may be:
+- an animal
+- a plant
+- another clearly identifiable living organism
+
+For this application, focus on animals and plants.
+
+Return ONLY valid JSON in exactly this format:
 
 {
-  "animal": "common animal name",
+  "type": "animal or plant",
+  "common_name": "common name",
   "scientific_name": "scientific name if reasonably identifiable, otherwise empty string",
   "confidence": 0,
-  "reason": "short visual explanation"
+  "reason": "short explanation based on visible features"
 }
 
 Rules:
 
-- Identify the visible animal.
-- Do not invent a species.
-- If species identification is uncertain, give the broader animal name.
-- Confidence must be from 0 to 100.
-- Return JSON only.
+1. Do not invent a species.
+2. If species-level identification is uncertain,
+   identify the broader organism.
+3. Confidence must be between 0 and 100.
+4. Keep the reason short.
+5. Return JSON only.
 """
 
     response = gemini_client.models.generate_content(
@@ -224,6 +299,7 @@ Rules:
 
     text = response.text.strip()
 
+    # Remove accidental markdown JSON fences
     if text.startswith("```"):
 
         text = text.replace(
@@ -241,35 +317,15 @@ Rules:
     return json.loads(text)
 
 
-def is_temporary_error(error_text):
-
-    error_text = str(
-        error_text
-    ).upper()
-
-    temporary_codes = [
-        "503",
-        "UNAVAILABLE",
-        "429",
-        "RESOURCE_EXHAUSTED",
-        "408",
-        "TIMEOUT",
-        "500",
-        "502",
-        "504"
-    ]
-
-    return any(
-        code in error_text
-        for code in temporary_codes
-    )
-
+# =========================================================
+# GEMINI IDENTIFICATION CACHE
+# =========================================================
 
 @st.cache_data(
     ttl=3600,
     show_spinner=False
 )
-def identify_animal_cached(
+def identify_organism_cached(
     image_bytes,
     image_hash
 ):
@@ -278,7 +334,8 @@ def identify_animal_cached(
 
         return {
             "success": False,
-            "error": "GEMINI_API_KEY is missing or invalid.",
+            "error":
+                "GEMINI_API_KEY is missing or invalid.",
             "model": None
         }
 
@@ -306,7 +363,7 @@ def identify_animal_cached(
                 f"{model_name}: {str(e)}"
             )
 
-            # Automatically move to another model
+            # Try the next model
             continue
 
     return {
@@ -317,432 +374,121 @@ def identify_animal_cached(
 
 
 # =========================================================
-# HOME PAGE
+# GEMINI DETAILED SPECIES INFORMATION
+# =========================================================
+#
+# This is NOT automatically generated when opening a species.
+# It runs only when the user presses "More Information".
 # =========================================================
 
-def show_home():
+@st.cache_data(
+    ttl=86400,
+    show_spinner=False
+)
+def generate_species_information(
+    common_name,
+    scientific_name,
+    organism_type
+):
 
-    st.title("🐾 Animal Encyclopedia AI")
+    if gemini_client is None:
 
-    st.markdown(
-        "### Explore the animal world"
-    )
+        return {
+            "error":
+                "Gemini API is not available."
+        }
 
-    st.write(
-        "Identify an animal from a photograph "
-        "or search directly through biodiversity data."
-    )
+    prompt = f"""
+Create an educational encyclopedia entry for:
 
-    st.divider()
+Common name: {common_name}
+Scientific name: {scientific_name}
+Organism type: {organism_type}
 
-    st.subheader(
-        "What would you like to do?"
-    )
+Important:
+- This is an educational biodiversity encyclopedia.
+- Do not invent precise measurements when uncertain.
+- Clearly indicate when information is approximate.
+- Do not provide medical treatment or medicinal dosage.
+- Do not claim that a species cures a disease.
+- Do not invent scientific facts.
 
-    # -----------------------------------------------------
-    # Get beautiful iNaturalist images for cards
-    # -----------------------------------------------------
+Return ONLY valid JSON:
 
-    rabbit = search_taxon_cached("rabbit")
-    fox = search_taxon_cached("fox")
+{{
+  "region": "...",
+  "habitat": "...",
+  "diet_or_growth": "...",
+  "size": "...",
+  "lifespan": "...",
+  "anatomy": "...",
+  "behaviour": "...",
+  "reproduction": "...",
+  "adaptations": "...",
+  "ecology": "..."
+}}
 
-    rabbit_image = None
-    fox_image = None
+For an ANIMAL:
+- diet_or_growth = what it eats
+- include behaviour, anatomy and reproduction
 
-    if rabbit and not rabbit.get("error"):
+For a PLANT:
+- diet_or_growth = how it grows and develops
+- anatomy = roots, stem, leaves, flowers, fruit/seeds where applicable
+- behaviour = plant responses where scientifically meaningful
+- reproduction = sexual/asexual reproduction
+- adaptations = environmental adaptations
 
-        rabbit_photo = rabbit.get(
-            "default_photo"
+Keep each field concise but informative.
+Return JSON only.
+"""
+
+    try:
+
+        response = gemini_client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=prompt
         )
 
-        rabbit_image = get_large_photo_url(
-            rabbit_photo
-        )
+        text = response.text.strip()
 
-    if fox and not fox.get("error"):
+        if text.startswith("```"):
 
-        fox_photo = fox.get(
-            "default_photo"
-        )
-
-        fox_image = get_large_photo_url(
-            fox_photo
-        )
-
-    # -----------------------------------------------------
-    # TWO NATIVE STREAMLIT CARDS
-    # -----------------------------------------------------
-
-    col1, col2 = st.columns(
-        2,
-        gap="large"
-    )
-
-    # =====================================================
-    # IDENTIFY CARD
-    # =====================================================
-
-    with col1:
-
-        with st.container(border=True):
-
-            if rabbit_image:
-
-                st.image(
-                    rabbit_image,
-                    use_container_width=True
-                )
-
-            else:
-
-                st.markdown(
-                    "## 🐰"
-                )
-
-            st.subheader(
-                "📷 Identify an Animal"
-            )
-
-            st.write(
-                "Upload a photograph and let AI "
-                "identify the animal."
-            )
-
-            if st.button(
-                "📷 Identify an Animal",
-                type="primary",
-                use_container_width=True,
-                key="identify_home"
-            ):
-
-                st.session_state.page = (
-                    "identify"
-                )
-
-                st.rerun()
-
-    # =====================================================
-    # SEARCH CARD
-    # =====================================================
-
-    with col2:
-
-        with st.container(border=True):
-
-            if fox_image:
-
-                st.image(
-                    fox_image,
-                    use_container_width=True
-                )
-
-            else:
-
-                st.markdown(
-                    "## 🦊"
-                )
-
-            st.subheader(
-                "🔎 Search an Animal"
-            )
-
-            st.write(
-                "Search any animal and explore "
-                "its biodiversity information."
-            )
-
-            if st.button(
-                "🔎 Search an Animal",
-                use_container_width=True,
-                key="search_home"
-            ):
-
-                st.session_state.page = (
-                    "search"
-                )
-
-                st.rerun()
-
-    st.divider()
-
-    st.caption(
-        "🌍 Biodiversity information and photographs "
-        "are provided through iNaturalist."
-    )
-
-
-# =========================================================
-# IDENTIFY PAGE
-# =========================================================
-
-def show_identify():
-
-    if st.button("← Home"):
-
-        st.session_state.page = "home"
-
-        st.rerun()
-
-    st.title("📷 Identify an Animal")
-
-    st.write(
-        "Upload a clear photograph of an animal."
-    )
-
-    uploaded_file = st.file_uploader(
-        "Choose an animal image",
-        type=[
-            "jpg",
-            "jpeg",
-            "png",
-            "webp"
-        ]
-    )
-
-    if uploaded_file:
-
-        image_bytes = uploaded_file.getvalue()
-
-        image_hash = hashlib.sha256(
-            image_bytes
-        ).hexdigest()
-
-        # Detect a new image
-        if (
-            st.session_state.image_hash
-            != image_hash
-        ):
-
-            st.session_state.image_bytes = (
-                image_bytes
-            )
-
-            st.session_state.image_hash = (
-                image_hash
-            )
-
-            st.session_state.ai_result = None
-            st.session_state.ai_model_used = None
-
-            st.session_state.database_taxon = None
-            st.session_state.database_observations = []
-            st.session_state.database_loaded = False
-
-    if st.session_state.image_bytes:
-
-        image = Image.open(
-            BytesIO(
-                st.session_state.image_bytes
-            )
-        )
-
-        st.image(
-            image,
-            caption="Uploaded Image",
-            use_container_width=True
-        )
-
-        # -------------------------------------------------
-        # AI IDENTIFICATION
-        # -------------------------------------------------
-
-        if st.session_state.ai_result is None:
-
-            if st.button(
-                "🔍 Identify Animal",
-                type="primary",
-                use_container_width=True
-            ):
-
-                with st.spinner(
-                    "AI is identifying the animal..."
-                ):
-
-                    result = (
-                        identify_animal_cached(
-                            st.session_state.image_bytes,
-                            st.session_state.image_hash
-                        )
-                    )
-
-                if result["success"]:
-
-                    st.session_state.ai_result = (
-                        result["result"]
-                    )
-
-                    st.session_state.ai_model_used = (
-                        result["model"]
-                    )
-
-                    st.rerun()
-
-                else:
-
-                    st.error(
-                        "AI is temporarily unavailable."
-                    )
-
-                    st.info(
-                        "The app automatically tried "
-                        "multiple AI models. Please try again."
-                    )
-
-                    with st.expander(
-                        "Technical details"
-                    ):
-
-                        st.code(
-                            result["error"]
-                        )
-
-        # -------------------------------------------------
-        # RESULT
-        # -------------------------------------------------
-
-        if st.session_state.ai_result:
-
-            result = (
-                st.session_state.ai_result
-            )
-
-            animal = result.get(
-                "animal",
-                "Unknown"
-            )
-
-            scientific_name = result.get(
-                "scientific_name",
+            text = text.replace(
+                "```json",
                 ""
             )
 
-            confidence = result.get(
-                "confidence",
-                0
-            )
-
-            reason = result.get(
-                "reason",
+            text = text.replace(
+                "```",
                 ""
             )
 
-            st.success(
-                f"🐾 Animal identified: **{animal}**"
-            )
+            text = text.strip()
 
-            st.metric(
-                "AI Confidence",
-                f"{confidence}%"
-            )
+        return json.loads(text)
 
-            if scientific_name:
+    except Exception as e:
 
-                st.write(
-                    f"**Possible scientific name:** "
-                    f"*{scientific_name}*"
-                )
-
-            if reason:
-
-                st.write(
-                    f"**Why:** {reason}"
-                )
-
-            # -------------------------------------------------
-            # iNATURALIST
-            # -------------------------------------------------
-
-            if not st.session_state.database_loaded:
-
-                st.divider()
-
-                st.subheader(
-                    "🌍 Explore this animal"
-                )
-
-                st.write(
-                    "Get biodiversity information "
-                    "and photographs from iNaturalist."
-                )
-
-                if st.button(
-                    "🌍 Get Species Information",
-                    type="primary",
-                    use_container_width=True
-                ):
-
-                    with st.spinner(
-                        "Searching iNaturalist..."
-                    ):
-
-                        taxon = (
-                            search_taxon_cached(
-                                animal
-                            )
-                        )
-
-                        if (
-                            taxon
-                            and not taxon.get(
-                                "error"
-                            )
-                        ):
-
-                            taxon_id = taxon.get(
-                                "id"
-                            )
-
-                            observations = []
-
-                            if taxon_id:
-
-                                observations = (
-                                    get_observations_cached(
-                                        taxon_id
-                                    )
-                                )
-
-                            st.session_state.database_taxon = (
-                                taxon
-                            )
-
-                            st.session_state.database_observations = (
-                                observations
-                            )
-
-                            st.session_state.database_loaded = (
-                                True
-                            )
-
-                    st.rerun()
-
-            if st.session_state.database_loaded:
-
-                display_database_result(
-                    st.session_state.database_taxon,
-                    st.session_state.database_observations
-                )
-
-    else:
-
-        st.info(
-            "📷 Upload an animal photograph to begin."
-        )
+        return {
+            "error": str(e)
+        }
 
 
 # =========================================================
-# DATABASE RESULT
+# SPECIES PAGE
 # =========================================================
 
-def display_database_result(
+def show_species_page(
     taxon,
-    observations
+    observations,
+    ai_result=None
 ):
 
     if not taxon:
 
         st.warning(
-            "No information was found."
+            "Species information could not be found."
         )
 
         return
@@ -781,10 +527,53 @@ def display_database_result(
         or "Unknown"
     )
 
-    st.divider()
+    # Determine animal/plant
+    if ai_result:
+
+        organism_type = (
+            ai_result.get(
+                "type",
+                ""
+            ).lower()
+        )
+
+    else:
+
+        if major_group.lower() == "plantae":
+            organism_type = "plant"
+
+        elif major_group.lower() == "animalia":
+            organism_type = "animal"
+
+        else:
+            organism_type = "organism"
+
+    # -----------------------------------------------------
+    # HEADER
+    # -----------------------------------------------------
+
+    if organism_type == "plant":
+
+        st.title(
+            f"🌱 {common_name}"
+        )
+
+    else:
+
+        st.title(
+            f"🐾 {common_name}"
+        )
+
+    st.markdown(
+        f"### *{scientific_name}*"
+    )
+
+    # -----------------------------------------------------
+    # BASIC INFORMATION
+    # -----------------------------------------------------
 
     st.subheader(
-        "🌍 iNaturalist Information"
+        "📚 Basic Information"
     )
 
     col1, col2 = st.columns(2)
@@ -792,15 +581,9 @@ def display_database_result(
     with col1:
 
         st.write(
-            f"**Common name:** {common_name}"
-        )
-
-        st.write(
             f"**Scientific name:** "
             f"*{scientific_name}*"
         )
-
-    with col2:
 
         st.write(
             f"**Taxonomic rank:** {rank}"
@@ -810,7 +593,29 @@ def display_database_result(
             f"**Major group:** {major_group}"
         )
 
-    # Main photo
+    with col2:
+
+        if organism_type == "plant":
+
+            st.write(
+                "**Type:** 🌱 Plant"
+            )
+
+        elif organism_type == "animal":
+
+            st.write(
+                "**Type:** 🐾 Animal"
+            )
+
+        else:
+
+            st.write(
+                "**Type:** 🌍 Living organism"
+            )
+
+    # -----------------------------------------------------
+    # MAIN PHOTO
+    # -----------------------------------------------------
 
     default_photo = taxon.get(
         "default_photo"
@@ -825,7 +630,7 @@ def display_database_result(
         if photo_url:
 
             st.subheader(
-                "📸 Species Photograph"
+                "📸 Photograph"
             )
 
             st.image(
@@ -833,12 +638,252 @@ def display_database_result(
                 use_container_width=True
             )
 
-    # More photos
+    # -----------------------------------------------------
+    # BASIC AI INFORMATION
+    # -----------------------------------------------------
+
+    if ai_result:
+
+        reason = ai_result.get(
+            "reason",
+            ""
+        )
+
+        confidence = ai_result.get(
+            "confidence",
+            None
+        )
+
+        if confidence is not None:
+
+            st.write(
+                f"**Identification confidence:** "
+                f"{confidence}%"
+            )
+
+        if reason:
+
+            st.write(
+                f"**Identification reason:** "
+                f"{reason}"
+            )
+
+    # -----------------------------------------------------
+    # MORE INFORMATION BUTTON
+    # -----------------------------------------------------
+
+    st.divider()
+
+    st.subheader(
+        "🔬 More Information"
+    )
+
+    st.write(
+        "Open this section if you want a deeper "
+        "educational explanation."
+    )
+
+    if st.button(
+        "🔬 Show More Information",
+        type="primary",
+        use_container_width=True,
+        key="more_info_button"
+    ):
+
+        with st.spinner(
+            "Preparing detailed information..."
+        ):
+
+            information = (
+                generate_species_information(
+                    common_name,
+                    scientific_name,
+                    organism_type
+                )
+            )
+
+        st.session_state.species_info = (
+            information
+        )
+
+        st.session_state.species_info_loaded = (
+            True
+        )
+
+        st.rerun()
+
+    # -----------------------------------------------------
+    # DETAILED INFORMATION
+    # -----------------------------------------------------
+
+    if st.session_state.species_info_loaded:
+
+        information = (
+            st.session_state.species_info
+        )
+
+        if information.get("error"):
+
+            st.error(
+                "Detailed information could not "
+                "be generated right now."
+            )
+
+        else:
+
+            st.info(
+                "The following detailed educational "
+                "text is AI-generated and should be "
+                "treated as an educational summary."
+            )
+
+            # REGION
+            with st.expander(
+                "🌍 Region & Distribution",
+                expanded=True
+            ):
+
+                st.write(
+                    information.get(
+                        "region",
+                        "Information unavailable."
+                    )
+                )
+
+            # HABITAT
+            with st.expander(
+                "🌳 Habitat",
+                expanded=True
+            ):
+
+                st.write(
+                    information.get(
+                        "habitat",
+                        "Information unavailable."
+                    )
+                )
+
+            # DIET / GROWTH
+            if organism_type == "plant":
+
+                title = "🌱 Growth & Development"
+
+            else:
+
+                title = "🍖 Diet & Feeding"
+
+            with st.expander(
+                title,
+                expanded=True
+            ):
+
+                st.write(
+                    information.get(
+                        "diet_or_growth",
+                        "Information unavailable."
+                    )
+                )
+
+            # SIZE
+            with st.expander(
+                "📏 Size",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "size",
+                        "Information unavailable."
+                    )
+                )
+
+            # LIFESPAN
+            with st.expander(
+                "❤️ Lifespan",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "lifespan",
+                        "Information unavailable."
+                    )
+                )
+
+            # ANATOMY
+            with st.expander(
+                "🧬 Anatomy",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "anatomy",
+                        "Information unavailable."
+                    )
+                )
+
+            # BEHAVIOUR
+            with st.expander(
+                "🧠 Behaviour",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "behaviour",
+                        "Information unavailable."
+                    )
+                )
+
+            # REPRODUCTION
+            with st.expander(
+                "❤️ Reproduction",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "reproduction",
+                        "Information unavailable."
+                    )
+                )
+
+            # ADAPTATIONS
+            with st.expander(
+                "🌍 Adaptations",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "adaptations",
+                        "Information unavailable."
+                    )
+                )
+
+            # ECOLOGY
+            with st.expander(
+                "🌿 Ecological Role",
+                expanded=False
+            ):
+
+                st.write(
+                    information.get(
+                        "ecology",
+                        "Information unavailable."
+                    )
+
+    # -----------------------------------------------------
+    # MORE PHOTOS
+    # -----------------------------------------------------
 
     if observations:
 
+        st.divider()
+
         st.subheader(
-            "📷 More Photographs"
+            "📷 More iNaturalist Photographs"
         )
 
         photo_urls = []
@@ -871,20 +916,235 @@ def display_database_result(
                 use_container_width=True
             )
 
-    # iNaturalist page
+    # -----------------------------------------------------
+    # iNATURALIST SOURCE
+    # -----------------------------------------------------
 
     taxon_id = taxon.get("id")
 
     if taxon_id:
 
-        url = (
+        inat_url = (
             "https://www.inaturalist.org/taxa/"
             + str(taxon_id)
         )
 
         st.markdown(
-            f"🔗 [View this animal on iNaturalist]({url})"
+            f"🔗 [View this taxon on iNaturalist]"
+            f"({inat_url})"
         )
+
+
+# =========================================================
+# HOME
+# =========================================================
+
+def show_home():
+
+    st.title(
+        "🌍 Nature Encyclopedia AI"
+    )
+
+    st.subheader(
+        "Explore the living world"
+    )
+
+    st.write(
+        "Identify animals and plants from photographs "
+        "or search for species directly."
+    )
+
+    st.divider()
+
+    # -----------------------------------------------------
+    # Get example animal image
+    # -----------------------------------------------------
+
+    if (
+        st.session_state.home_animal_image
+        is None
+    ):
+
+        animal_taxon = (
+            search_taxon_cached(
+                "tiger"
+            )
+        )
+
+        if (
+            animal_taxon
+            and not animal_taxon.get("error")
+        ):
+
+            st.session_state.home_animal_image = (
+                get_large_photo_url(
+                    animal_taxon.get(
+                        "default_photo"
+                    )
+                )
+            )
+
+    # -----------------------------------------------------
+    # Get example plant image
+    # -----------------------------------------------------
+
+    if (
+        st.session_state.home_plant_image
+        is None
+    ):
+
+        plant_taxon = (
+            search_taxon_cached(
+                "sunflower"
+            )
+        )
+
+        if (
+            plant_taxon
+            and not plant_taxon.get("error")
+        ):
+
+            st.session_state.home_plant_image = (
+                get_large_photo_url(
+                    plant_taxon.get(
+                        "default_photo"
+                    )
+                )
+            )
+
+    # -----------------------------------------------------
+    # THREE MAIN OPTIONS
+    # -----------------------------------------------------
+
+    col1, col2, col3 = st.columns(
+        3,
+        gap="large"
+    )
+
+    # =====================================================
+    # ANIMALS
+    # =====================================================
+
+    with col1:
+
+        with st.container(border=True):
+
+            if st.session_state.home_animal_image:
+
+                st.image(
+                    st.session_state.home_animal_image,
+                    use_container_width=True
+                )
+
+            else:
+
+                st.write("🐾")
+
+            st.subheader(
+                "🐾 Animals"
+            )
+
+            st.write(
+                "Explore animals, habitats, "
+                "behaviour, anatomy and more."
+            )
+
+            if st.button(
+                "Explore Animals",
+                use_container_width=True,
+                key="animals_button"
+            ):
+
+                st.session_state.page = (
+                    "search"
+                )
+
+                st.session_state.search_name = ""
+
+                st.rerun()
+
+    # =====================================================
+    # PLANTS
+    # =====================================================
+
+    with col2:
+
+        with st.container(border=True):
+
+            if st.session_state.home_plant_image:
+
+                st.image(
+                    st.session_state.home_plant_image,
+                    use_container_width=True
+                )
+
+            else:
+
+                st.write("🌱")
+
+            st.subheader(
+                "🌱 Plants"
+            )
+
+            st.write(
+                "Explore plants, growth, structure, "
+                "reproduction and ecology."
+            )
+
+            if st.button(
+                "Explore Plants",
+                use_container_width=True,
+                key="plants_button"
+            ):
+
+                st.session_state.page = (
+                    "search"
+                )
+
+                st.session_state.search_name = ""
+
+                st.rerun()
+
+    # =====================================================
+    # PHOTO IDENTIFICATION
+    # =====================================================
+
+    with col3:
+
+        with st.container(border=True):
+
+            st.markdown(
+                "## 📷"
+            )
+
+            st.subheader(
+                "Identify from Photo"
+            )
+
+            st.write(
+                "Upload a photograph and let AI "
+                "identify an animal or plant."
+            )
+
+            if st.button(
+                "Identify from Photo",
+                type="primary",
+                use_container_width=True,
+                key="photo_button"
+            ):
+
+                st.session_state.page = (
+                    "identify"
+                )
+
+                st.rerun()
+
+    st.divider()
+
+    st.info(
+        "🌿 Biodiversity data and photographs "
+        "are retrieved from iNaturalist."
+    )
 
 
 # =========================================================
@@ -899,84 +1159,413 @@ def show_search():
 
         st.rerun()
 
-    st.title("🔎 Search an Animal")
-
-    st.write(
-        "Search any animal directly through "
-        "the iNaturalist biodiversity database."
+    st.title(
+        "🔎 Explore Nature"
     )
 
-    animal_name = st.text_input(
-        "Animal name",
+    st.write(
+        "Search for an animal or plant by name."
+    )
+
+    search_name = st.text_input(
+        "Search",
+        value=st.session_state.search_name,
         placeholder=(
-            "Example: Rabbit, Tiger, Eagle, Frog..."
+            "Example: Tiger, Rabbit, Mango, Neem..."
         )
     )
 
     if st.button(
-        "🔎 Search Animal",
+        "🔎 Search",
         type="primary",
         use_container_width=True
     ):
 
-        if not animal_name.strip():
+        if not search_name.strip():
 
             st.warning(
-                "Please enter an animal name."
+                "Please enter a name."
             )
 
-        else:
+            return
 
-            with st.spinner(
-                "Searching iNaturalist..."
+        st.session_state.search_name = (
+            search_name.strip()
+        )
+
+        with st.spinner(
+            "Finding this species..."
+        ):
+
+            taxon = (
+                search_taxon_cached(
+                    search_name.strip()
+                )
+            )
+
+            if taxon and not taxon.get(
+                "error"
             ):
 
-                taxon = (
-                    search_taxon_cached(
-                        animal_name.strip()
-                    )
+                taxon_id = taxon.get(
+                    "id"
                 )
 
-                if (
-                    taxon
-                    and not taxon.get(
-                        "error"
-                    )
-                ):
+                observations = []
 
-                    taxon_id = taxon.get(
-                        "id"
-                    )
+                if taxon_id:
 
-                    observations = []
-
-                    if taxon_id:
-
-                        observations = (
-                            get_observations_cached(
-                 taxon_id
-                            )
+                    observations = (
+                        get_observations_cached(
+                            taxon_id
                         )
-
-                    display_database_result(
-                        taxon,
-                        observations
                     )
 
-                elif taxon and taxon.get(
-                    "error"
+                # Reset detailed information
+                st.session_state.species_info = None
+
+                st.session_state.species_info_loaded = (
+                    False
+                )
+
+                st.session_state.selected_taxon = (
+                    taxon
+                )
+
+                st.session_state.selected_observations = (
+                    observations
+                )
+
+                st.rerun()
+
+            elif taxon and taxon.get(
+                "error"
+            ):
+
+                st.error(
+                    "iNaturalist error: "
+                    + str(taxon["error"])
+                )
+
+            else:
+
+                st.warning(
+                    "No matching species was found."
+                )
+
+    # Show selected species
+    if st.session_state.selected_taxon:
+
+        show_species_page(
+            st.session_state.selected_taxon,
+            st.session_state.selected_observations
+        )
+
+
+# =========================================================
+# IDENTIFICATION PAGE
+# =========================================================
+
+def show_identify():
+
+    if st.button("← Home"):
+
+        st.session_state.page = "home"
+
+        st.rerun()
+
+    st.title(
+        "📷 Identify an Animal or Plant"
+    )
+
+    st.write(
+        "Upload a photograph and AI will try "
+        "to identify the living organism."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Choose a photograph",
+        type=[
+            "jpg",
+            "jpeg",
+            "png",
+            "webp"
+        ]
+    )
+
+    if uploaded_file:
+
+        image_bytes = (
+            uploaded_file.getvalue()
+        )
+
+        image_hash = hashlib.sha256(
+            image_bytes
+        ).hexdigest()
+
+        # New image
+        if (
+            st.session_state.image_hash
+            != image_hash
+        ):
+
+            st.session_state.image_bytes = (
+                image_bytes
+            )
+
+            st.session_state.image_hash = (
+                image_hash
+            )
+
+            st.session_state.ai_result = None
+            st.session_state.ai_model_used = None
+
+            st.session_state.selected_taxon = None
+            st.session_state.selected_observations = []
+
+            st.session_state.species_info = None
+            st.session_state.species_info_loaded = False
+                # -----------------------------------------------------
+    # DISPLAY IMAGE
+    # -----------------------------------------------------
+
+    if st.session_state.image_bytes:
+
+        image = Image.open(
+            BytesIO(
+                st.session_state.image_bytes
+            )
+        )
+
+        st.image(
+            image,
+            caption="Uploaded Photograph",
+            use_container_width=True
+        )
+
+        # -------------------------------------------------
+        # IDENTIFY
+        # -------------------------------------------------
+
+        if st.session_state.ai_result is None:
+
+            if st.button(
+                "🔍 Identify",
+                type="primary",
+                use_container_width=True
+            ):
+
+                with st.spinner(
+                    "AI is examining the photograph..."
                 ):
 
-                    st.error(
-                        "iNaturalist error: "
-                        + str(taxon["error"])
+                    result = (
+                        identify_organism_cached(
+                            st.session_state.image_bytes,
+                            st.session_state.image_hash
+                        )
                     )
+
+                if result["success"]:
+
+                    st.session_state.ai_result = (
+                        result["result"]
+                    )
+
+                    st.session_state.ai_model_used = (
+                        result["model"]
+                    )
+
+                    st.rerun()
 
                 else:
 
-                    st.warning(
-                        "No matching animal was found."
+                    st.error(
+                        "The AI service is temporarily "
+                        "unavailable."
                     )
+
+                    st.info(
+                        "The app automatically tried "
+                        "the available Flash models."
+                    )
+
+                    with st.expander(
+                        "Technical details"
+                    ):
+
+                        st.code(
+                            result["error"]
+                        )
+
+        # -------------------------------------------------
+        # SHOW AI RESULT
+        # -------------------------------------------------
+
+        if st.session_state.ai_result:
+
+            result = (
+                st.session_state.ai_result
+            )
+
+            organism_type = result.get(
+                "type",
+                "organism"
+            )
+
+            common_name = result.get(
+                "common_name",
+                "Unknown"
+            )
+
+            scientific_name = result.get(
+                "scientific_name",
+                ""
+            )
+
+            confidence = result.get(
+                "confidence",
+                0
+            )
+
+            reason = result.get(
+                "reason",
+                ""
+            )
+
+            if organism_type.lower() == "plant":
+
+                st.success(
+                    f"🌱 Identified: **{common_name}**"
+                )
+
+            else:
+
+                st.success(
+                    f"🐾 Identified: **{common_name}**"
+                )
+
+            st.metric(
+                "AI Confidence",
+                f"{confidence}%"
+            )
+
+            if scientific_name:
+
+                st.write(
+                    f"**Scientific name:** "
+                    f"*{scientific_name}*"
+                )
+
+            if reason:
+
+                st.write(
+                    f"**Why:** {reason}"
+                )
+
+            if st.session_state.ai_model_used:
+
+                st.caption(
+                    "AI model: "
+                    + st.session_state.ai_model_used
+                )
+
+            # -------------------------------------------------
+            # FIND iNATURALIST SPECIES
+            # -------------------------------------------------
+
+            if st.session_state.selected_taxon is None:
+
+                if st.button(
+                    "🌍 Find Species Information",
+                    type="primary",
+                    use_container_width=True
+                ):
+
+                    with st.spinner(
+                        "Finding biodiversity information..."
+                    ):
+
+                        # Prefer scientific name
+                        # when available
+                        if scientific_name:
+
+                            taxon = (
+                                search_taxon_cached(
+                                    scientific_name
+                                )
+                            )
+
+                        else:
+
+                            taxon = (
+                                search_taxon_cached(
+                                    common_name
+                                )
+                            )
+
+                        if (
+                            taxon
+                            and not taxon.get(
+                                "error"
+                            )
+                        ):
+
+                            taxon_id = taxon.get(
+                                "id"
+                            )
+
+                            observations = []
+
+                            if taxon_id:
+
+                                observations = (
+                                    get_observations_cached(
+                                        taxon_id
+                                    )
+                                )
+
+                            st.session_state.selected_taxon = (
+                                taxon
+                            )
+
+                            st.session_state.selected_observations = (
+                                observations
+                            )
+
+                            st.session_state.species_info = None
+
+                            st.session_state.species_info_loaded = (
+                                False
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.warning(
+                                "The organism was identified, "
+                                "but no matching iNaturalist "
+                                "taxon was found."
+                            )
+
+            # -------------------------------------------------
+            # SPECIES PAGE
+            # -------------------------------------------------
+
+            if st.session_state.selected_taxon:
+
+                show_species_page(
+                    st.session_state.selected_taxon,
+                    st.session_state.selected_observations,
+                    ai_result=result
+                )
+
+    else:
+
+        st.info(
+            "📷 Upload a photograph to begin."
+        )
 
 
 # =========================================================
@@ -987,10 +1576,10 @@ if st.session_state.page == "home":
 
     show_home()
 
-elif st.session_state.page == "identify":
-
-    show_identify()
-
 elif st.session_state.page == "search":
 
     show_search()
+
+elif st.session_state.page == "identify":
+
+    show_identify()
