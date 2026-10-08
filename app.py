@@ -488,3 +488,125 @@ elif option == "📷 Identify Animal from Image":
                     f"**{animal}** — "
                     f"{percentage:.2f}%"
 )
+            
+# =========================================================
+# iNATURALIST DATABASE TEST
+# =========================================================
+
+import requests
+
+st.divider()
+st.header("🌍 Animal Database")
+
+database_animal = st.text_input(
+    "Search an animal in the biodiversity database:",
+    placeholder="Example: Horse"
+)
+
+if st.button("🔎 Search Database"):
+
+    if database_animal.strip():
+
+        with st.spinner("Searching iNaturalist..."):
+
+            url = "https://api.inaturalist.org/v1/observations"
+
+            params = {
+                "taxon_name": database_animal.strip(),
+                "photos": "true",
+                "per_page": 6,
+                "order_by": "votes",
+                "order": "desc"
+            }
+
+            try:
+
+                response = requests.get(
+                    url,
+                    params=params,
+                    timeout=15
+                )
+
+                if response.status_code == 200:
+
+                    data = response.json()
+                    results = data.get("results", [])
+
+                    if results:
+
+                        st.success(
+                            f"Found {len(results)} photographs!"
+                        )
+
+                        for observation in results:
+
+                            photos = observation.get(
+                                "photos", []
+                            )
+
+                            taxon = observation.get(
+                                "taxon", {}
+                            )
+
+                            common_name = taxon.get(
+                                "preferred_common_name",
+                                database_animal
+                            )
+
+                            scientific_name = taxon.get(
+                                "name",
+                                "Unknown"
+                            )
+
+                            st.subheader(
+                                f"🐾 {common_name}"
+                            )
+
+                            st.write(
+                                f"**Scientific name:** "
+                                f"{scientific_name}"
+                            )
+
+                            if photos:
+
+                                photo_urls = []
+
+                                for photo in photos[:3]:
+
+                                    photo_url = photo.get(
+                                        "url"
+                                    )
+
+                                    if photo_url:
+                                        photo_urls.append(
+                                            photo_url
+                                        )
+
+                                if photo_urls:
+
+                                    st.image(
+                                        photo_urls,
+                                        width=250
+                                    )
+
+                            st.divider()
+
+                    else:
+
+                        st.warning(
+                            "No photographs were found "
+                            "for this search."
+                        )
+
+                else:
+
+                    st.error(
+                        f"Database request failed: "
+                        f"{response.status_code}"
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    f"Connection error: {e}"
+                )
