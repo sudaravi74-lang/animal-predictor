@@ -1107,7 +1107,6 @@ Important:
 # =========================================================
 # CONVERSATION PAGE
 # =========================================================
-
 def show_conversation():
 
     character = st.session_state.active_character
@@ -1121,16 +1120,22 @@ def show_conversation():
         character_icon = "🧒"
         greeting = "Hiii! I'm Gogy! 👋\n\nWhat are you curious about?"
 
+    # HOME BUTTON
+
     if st.button("← Home", key="conversation_home"):
         st.session_state.page = "home"
         st.rerun()
 
+    # CHARACTER HEADER
+
     st.title(character_icon + " Talk to " + character_name)
+
     st.caption("Ask me anything about nature.")
 
     # INITIAL GREETING
 
     if not st.session_state.character_conversation:
+
         with st.chat_message("assistant"):
             st.write(greeting)
 
@@ -1139,23 +1144,29 @@ def show_conversation():
     for message in st.session_state.character_conversation:
 
         if message["role"] == "user":
+
             with st.chat_message("user"):
                 st.write(message["content"])
 
         else:
+
             with st.chat_message("assistant"):
                 st.write(message["content"])
 
     # TEXT INPUT
 
-    user_message = st.chat_input("Talk to " + character_name + "...")
+    user_message = st.chat_input(
+        "Talk to " + character_name + "..."
+    )
 
     if user_message:
 
-        st.session_state.character_conversation.append({
-            "role": "user",
-            "content": user_message
-        })
+        st.session_state.character_conversation.append(
+            {
+                "role": "user",
+                "content": user_message
+            }
+        )
 
         with st.chat_message("user"):
             st.write(user_message)
@@ -1164,24 +1175,39 @@ def show_conversation():
 
         with st.chat_message("assistant"):
 
-            with st.spinner(character_name + " is thinking..."):
+            with st.spinner(
+                character_name + " is thinking..."
+            ):
 
-                answer = ask_character_ai(character, user_message)
+                answer = ask_character_ai(
+                    character,
+                    user_message
+                )
 
             st.write(answer)
 
             # AUDIO ARCHITECTURE
 
-            audio = generate_character_voice(character, answer)
+            audio = generate_character_voice(
+                character,
+                answer
+            )
 
             if audio:
-                prepare_audio(audio, character)
+
+                prepare_audio(
+                    audio,
+                    character
+                )
+
                 play_character_audio()
 
-        st.session_state.character_conversation.append({
-            "role": "assistant",
-            "content": answer
-        })
+        st.session_state.character_conversation.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
 
     # VOICE SETTINGS
 
@@ -1191,18 +1217,27 @@ def show_conversation():
 
     st.session_state.audio_enabled = st.toggle(
         "Enable character voice",
-        value=st.session_state.get("audio_enabled", True),
+        value=st.session_state.get(
+            "audio_enabled",
+            True
+        ),
         key="character_audio_toggle"
     )
 
     if st.session_state.audio_enabled:
+
         st.caption(
-            "🔊 " + character_name +
+            "🔊 " +
+            character_name +
             " will speak when voice generation is connected."
         )
+
     else:
-        st.caption("🔇 Character voice is turned off.")    
-     
+
+        st.caption(
+            "🔇 Character voice is turned off."
+)
+
                
         
          
