@@ -1243,35 +1243,18 @@ def show_conversation():
 
     if not st.session_state.character_conversation:
 
-          with 
-st.chat_message("assistant"):
+                   with st.chat_message("assistant"):
+            with st.spinner(character_name + " is thinking..."):
+                answer = ask_character_ai(character, user_message)
 
-            with st.spinner
-                        (character_name + " is thinking..."):
+            st.write(answer)
 
-        answer = 
-ask_character_ai(
-            character,
-            user_message
-        )
+            audio = generate_character_voice(character, answer)
 
-    st.write(answer)
-
-    # Prepare character voice
-    audio = generate_character_voice(
-        character,
-        answer
-    )
-
-    if audio:
-
-        prepare_audio(
-            audio,
-            character
-        )
-
-        play_character_audio()
-    # =====================================================
+            if audio:
+                prepare_audio(audio, character)
+                play_character_audio()
+ # =====================================================
     # PREVIOUS CONVERSATION
     # =====================================================
 
