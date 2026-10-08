@@ -33,6 +33,15 @@ defaults = {
     "selected_observations": [],
     "search_name": "",
     "home_nature_image": None
+    # =====================================================
+    # GOGY & TITLI AI
+    # =====================================================
+
+    "active_character": "gogy",
+    "character_conversation": [],
+    "voice_enabled": True,
+    "gogy_expression": "happy",
+    "titli_expression": "happy",
 }
 
 for key, value in defaults.items():
@@ -661,86 +670,434 @@ def show_species_page(
                 photo_urls,
                 use_container_width=True
             )
-
-
+            
 # =========================================================
-# HOME PAGE
+# HOME PAGE — GOGY & TITLI
 # =========================================================
 
 def show_home():
 
-    st.title(
-        "🌍 Nature Encyclopedia AI"
+    # =====================================================
+    # HOME PAGE STYLING
+    # =====================================================
+
+    st.markdown(
+        """
+        <style>
+
+        .nature-hero {
+            text-align: center;
+            padding: 18px 10px 8px 10px;
+        }
+
+        .nature-hero-title {
+            font-size: 38px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .nature-hero-subtitle {
+            font-size: 17px;
+            opacity: 0.75;
+        }
+
+        .character-card {
+            text-align: center;
+            padding: 22px 15px 20px 15px;
+            border-radius: 28px;
+            min-height: 245px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    rgba(235,250,255,0.95),
+                    rgba(250,248,255,0.95)
+                );
+
+            border: 1px solid rgba(120,160,190,0.20);
+
+            box-shadow:
+                0 8px 25px
+                rgba(0,0,0,0.07);
+        }
+
+        .gogy {
+            font-size: 82px;
+            display: inline-block;
+
+            animation:
+                gogyFloat 2.2s ease-in-out infinite;
+        }
+
+        .titli {
+            font-size: 78px;
+            display: inline-block;
+
+            animation:
+                titliFloat 2s ease-in-out infinite;
+        }
+
+        @keyframes gogyFloat {
+
+            0% {
+                transform:
+                    translateY(0px)
+                    rotate(-2deg);
+            }
+
+            50% {
+                transform:
+                    translateY(-12px)
+                    rotate(2deg);
+            }
+
+            100% {
+                transform:
+                    translateY(0px)
+                    rotate(-2deg);
+            }
+        }
+
+        @keyframes titliFloat {
+
+            0% {
+                transform:
+                    translateY(0px)
+                    rotate(2deg);
+            }
+
+            50% {
+                transform:
+                    translateY(-10px)
+                    rotate(-3deg);
+            }
+
+            100% {
+                transform:
+                    translateY(0px)
+                    rotate(2deg);
+            }
+        }
+
+        .character-name {
+            font-size: 25px;
+            font-weight: 800;
+            margin-top: 5px;
+        }
+
+        .character-description {
+            font-size: 16px;
+            line-height: 1.5;
+            margin-top: 8px;
+        }
+
+        .question-title {
+            text-align: center;
+            font-size: 27px;
+            font-weight: 750;
+            margin-top: 24px;
+        }
+
+        .question-subtitle {
+            text-align: center;
+            opacity: 0.7;
+            margin-bottom: 12px;
+        }
+
+        .butterfly {
+            display: inline-block;
+
+            animation:
+                butterflyFly 3s
+                ease-in-out infinite;
+        }
+
+        @keyframes butterflyFly {
+
+            0% {
+                transform:
+                    translate(0px, 0px)
+                    rotate(-5deg);
+            }
+
+            50% {
+                transform:
+                    translate(15px, -8px)
+                    rotate(7deg);
+            }
+
+            100% {
+                transform:
+                    translate(0px, 0px)
+                    rotate(-5deg);
+            }
+        }
+
+        </style>
+        """,
+        unsafe_allow_html=True
     )
 
-    st.subheader(
-        "Explore the living world"
+
+    # =====================================================
+    # HEADER
+    # =====================================================
+
+    st.markdown(
+        """
+        <div class="nature-hero">
+
+            <div class="nature-hero-title">
+                🌍 Nature Encyclopedia AI
+            </div>
+
+            <div class="nature-hero-subtitle">
+                Explore the living world
+                with your AI nature companions
+                <span class="butterfly">🦋</span>
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
-    st.write(
-        "Search for animals and plants, "
-        "or identify one from a photograph."
-    )
-
-    st.divider()
 
     # =====================================================
-    # HOME IMAGE
+    # GOGY + TITLI
     # =====================================================
 
-    if (
-        st.session_state.home_nature_image
-        is None
-    ):
-
-        example_taxon = (
-            search_taxon_cached("tiger")
-        )
-
-        if (
-            example_taxon
-            and not example_taxon.get("error")
-        ):
-
-            st.session_state.home_nature_image = (
-                get_large_photo_url(
-                    example_taxon.get(
-                        "default_photo"
-                    )
-                )
-            )
-
-    # =====================================================
-    # TWO OPTIONS
-    # =====================================================
-
-    col1, col2 = st.columns(
+    gogy_col, titli_col = st.columns(
         2,
         gap="large"
     )
 
+
     # =====================================================
-    # EXPLORE FLORA & FAUNA
+    # GOGY
     # =====================================================
 
-    with col1:
+    with gogy_col:
+
+        st.markdown(
+            """
+            <div class="character-card">
+
+                <div class="gogy">
+                    🧒👋
+                </div>
+
+                <div class="character-name">
+                    Gogy
+                </div>
+
+                <div class="character-description">
+                    “Hiii! I'm Gogy! 😄<br>
+                    Hmm... what are you curious about?”
+                </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            "🎤 Talk to Gogy",
+            type="primary",
+            use_container_width=True,
+            key="home_talk_gogy"
+        ):
+
+            st.session_state.active_character = "gogy"
+
+            st.session_state.character_conversation = []
+
+            st.session_state.page = "conversation"
+
+            st.rerun()
+
+
+    # =====================================================
+    # TITLI
+    # =====================================================
+
+    with titli_col:
+
+        st.markdown(
+            """
+            <div class="character-card">
+
+                <div class="titli">
+                    👧🦋
+                </div>
+
+                <div class="character-name">
+                    Titli
+                </div>
+
+                <div class="character-description">
+                    “Hiii! I'm Titli! 🦋<br>
+                    Ooooh! What shall we discover?”
+                </div>
+
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        if st.button(
+            "🎤 Talk to Titli",
+            use_container_width=True,
+            key="home_talk_titli"
+        ):
+
+            st.session_state.active_character = "titli"
+
+            st.session_state.character_conversation = []
+
+            st.session_state.page = "conversation"
+
+            st.rerun()
+
+
+    # =====================================================
+    # SEARCH
+    # =====================================================
+
+    st.markdown(
+        """
+        <div class="question-title">
+            🔎 What do you want to know?
+        </div>
+
+        <div class="question-subtitle">
+            Search for an animal, plant, or other organism.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+    with st.form(
+        "nature_home_search"
+    ):
+
+        home_search = st.text_input(
+            "Search",
+            placeholder=(
+                "Tiger, butterfly, frog, neem..."
+            ),
+            label_visibility="collapsed"
+        )
+
+        search_button = st.form_submit_button(
+            "🔎 Explore Nature",
+            use_container_width=True,
+            type="primary"
+        )
+
+
+    # =====================================================
+    # SEARCH ACTION
+    # =====================================================
+
+    if search_button:
+
+        if not home_search.strip():
+
+            st.warning(
+                "Gogy: “Hmm... tell me what you "
+                "want to discover! 😄”"
+            )
+
+        else:
+
+            st.session_state.search_name = (
+                home_search.strip()
+            )
+
+            with st.spinner(
+                "🌿 Looking through the living world..."
+            ):
+
+                taxon = search_taxon_cached(
+                    home_search.strip()
+                )
+
+
+            if (
+                taxon
+                and not taxon.get("error")
+            ):
+
+                taxon_id = taxon.get("id")
+
+                observations = []
+
+
+                if taxon_id:
+
+                    observations = (
+                        get_observations_cached(
+                            taxon_id
+                        )
+                    )
+
+
+                st.session_state.selected_taxon = (
+                    taxon
+                )
+
+                st.session_state.selected_observations = (
+                    observations
+                )
+
+                st.session_state.page = "search"
+
+                st.rerun()
+
+
+            elif (
+                taxon
+                and taxon.get("error")
+            ):
+
+                st.error(
+                    "iNaturalist error: "
+                    + str(taxon["error"])
+                )
+
+
+            else:
+
+                st.warning(
+                    "Awww... we couldn't find that "
+                    "organism. Try another name! 🦋"
+                )
+
+
+    # =====================================================
+    # OTHER OPTIONS
+    # =====================================================
+
+    st.divider()
+
+
+    option1, option2 = st.columns(
+        2,
+        gap="large"
+    )
+
+
+    # =====================================================
+    # EXPLORE
+    # =====================================================
+
+    with option1:
 
         with st.container(
             border=True
         ):
-
-            if st.session_state.home_nature_image:
-
-                st.image(
-                    st.session_state.home_nature_image,
-                    use_container_width=True
-                )
-
-            else:
-
-                st.markdown(
-                    "## 🌿"
-                )
 
             st.subheader(
                 "🌿 Explore Flora & Fauna"
@@ -748,14 +1105,13 @@ def show_home():
 
             st.write(
                 "Search animals and plants "
-                "in one place."
+                "and explore biodiversity information."
             )
 
             if st.button(
                 "Explore Flora & Fauna",
-                type="primary",
                 use_container_width=True,
-                key="explore_nature_button"
+                key="home_explore_nature"
             ):
 
                 st.session_state.page = "search"
@@ -768,46 +1124,49 @@ def show_home():
 
                 st.rerun()
 
+
     # =====================================================
-    # IDENTIFY FROM PHOTO
+    # PHOTO IDENTIFICATION
     # =====================================================
 
-    with col2:
+    with option2:
 
         with st.container(
             border=True
         ):
 
-            st.markdown(
-                "## 📷"
-            )
-
             st.subheader(
-                "Identify from Photo"
+                "📷 Identify from Photo"
             )
 
             st.write(
-                "Upload a photograph and let "
-                "AI identify an animal or plant."
+                "Upload a photograph and let AI "
+                "investigate the organism."
             )
 
             if st.button(
                 "Identify from Photo",
-                type="primary",
                 use_container_width=True,
-                key="photo_button"
+                key="home_identify_photo"
             ):
 
                 st.session_state.page = "identify"
 
                 st.rerun()
 
+
+    # =====================================================
+    # FOOTER
+    # =====================================================
+
     st.divider()
 
-    st.info(
+    st.caption(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
         )
+
+ 
     # =========================================================
 # SEARCH PAGE
 # =========================================================
@@ -1265,1133 +1624,14 @@ elif st.session_state.page == "search":
 elif st.session_state.page == "identify":
 
     show_identify()
-    # =========================================================
-# 🌿 NATURE ENCYCLOPEDIA AI — GOGY & TITLI VOICE LAYER
-# =========================================================
-
-import streamlit.components.v1 as components
-from google.genai import types
-import html
-
-
-# =========================================================
-# VOICE SESSION STATE
-# =========================================================
-
-voice_defaults = {
-    "voice_enabled": True,
-    "gogy_welcomed": False,
-    "last_voice_question": "",
-    "voice_transcript": "",
-}
-
-for key, value in voice_defaults.items():
-
-    if key not in st.session_state:
-
-        st.session_state[key] = value
-
-
-# =========================================================
-# GEMINI — UNDERSTAND MICROPHONE QUESTION
-# =========================================================
-
-def understand_voice_question(audio_bytes):
-
-    if gemini_client is None:
-
-        return None
-
-    try:
-
-        prompt = """
-Listen to this user's voice recording.
-
-Your job is ONLY to understand what the user is asking.
-
-Return ONLY the user's question as plain text.
-
-Do not answer the question.
-Do not add explanations.
-Do not use quotation marks.
-
-Examples:
-
-User says:
-"Tell me about tigers"
-
-Return:
-Tell me about tigers
-
-User says:
-"What is a butterfly?"
-
-Return:
-What is a butterfly?
-
-User says:
-"Show me information about neem"
-
-Return:
-Show me information about neem
-"""
-
-        audio_part = types.Part.from_bytes(
-            data=audio_bytes,
-            mime_type="audio/wav"
-        )
-
-        response = gemini_client.models.generate_content(
-
-            model=GEMINI_MODELS[0],
-
-            contents=[
-                prompt,
-                audio_part
-            ]
-        )
-
-        text = (
-            response.text
-            or ""
-        ).strip()
-
-        return text if text else None
-
-    except Exception:
-
-        return None
-
-
-# =========================================================
-# GOGY — CHARACTER INTRO
-# =========================================================
-
-def show_gogy_home():
-
-    st.markdown(
-        """
-        <style>
-
-        .gogy-box {
-
-            border-radius: 28px;
-            padding: 22px;
-            margin-top: 10px;
-            margin-bottom: 20px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(220,245,255,0.95),
-                    rgba(245,250,255,0.95)
-                );
-
-            border: 2px solid rgba(100,180,220,0.35);
-
-            box-shadow:
-                0 10px 35px
-                rgba(0,0,0,0.08);
-
-        }
-
-        .gogy-character {
-
-            font-size: 70px;
-
-            display: inline-block;
-
-            animation:
-                gogyFly 2.2s
-                ease-in-out
-                infinite;
-
-        }
-
-        @keyframes gogyFly {
-
-            0% {
-                transform:
-                    translateY(0px)
-                    rotate(-3deg);
-            }
-
-            50% {
-                transform:
-                    translateY(-12px)
-                    rotate(3deg);
-            }
-
-            100% {
-                transform:
-                    translateY(0px)
-                    rotate(-3deg);
-            }
-
-        }
-
-        .gogy-title {
-
-            font-size: 28px;
-            font-weight: 800;
-
-        }
-
-        .gogy-text {
-
-            font-size: 18px;
-
-        }
-
-        </style>
-
-        <div class="gogy-box">
-
-            <div class="gogy-character">
-                🧒
-            </div>
-
-            <div class="gogy-title">
-                Hi! I'm Gogy! 🌿
-            </div>
-
-            <div class="gogy-text">
-                Hehe! What do you wanna know
-                about the wonderful world of nature? 🌎
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-# =========================================================
-# GOGY VOICE
-# =========================================================
-
-def gogy_voice():
-
-    gogy_text = (
-        "Hiii! I'm Gogy! "
-        "Hehe! What do you wanna know "
-        "about the wonderful world of nature?"
-    )
-
-    components.html(
-
-        f"""
-        <script>
-
-        const text = {json.dumps(gogy_text)};
-
-        function speakGogy() {{
-
-            if (!window.speechSynthesis) return;
-
-            window.speechSynthesis.cancel();
-
-            const speech =
-                new SpeechSynthesisUtterance(text);
-
-            speech.rate = 0.92;
-            speech.pitch = 1.45;
-            speech.volume = 1.0;
-
-            const voices =
-                window.speechSynthesis.getVoices();
-
-            const voice =
-                voices.find(v =>
-                    v.lang &&
-                    v.lang.toLowerCase()
-                    .startsWith("en")
-                );
-
-            if (voice) {{
-                speech.voice = voice;
-            }}
-
-            window.speechSynthesis.speak(speech);
-        }}
-
-        setTimeout(
-            speakGogy,
-            500
-        );
-
-        </script>
-        """,
-
-        height=1
-    )
-
-
-# =========================================================
-# GOGY USER CONTROLS
-# =========================================================
-
-def show_gogy_controls():
-
-    st.markdown(
-        "### 🧒 Talk to Gogy"
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        typed_question = st.text_input(
-            "⌨️ Type to Gogy",
-            placeholder=(
-                "Example: Tell me about frogs..."
-            ),
-            key="gogy_text_question"
-        )
-
-    with col2:
-
-        voice_question = st.audio_input(
-            "🎤 Talk to Gogy",
-            sample_rate=16000,
-            key="gogy_microphone"
-        )
-
-    # =====================================================
-    # TYPED QUESTION
-    # =====================================================
-
-    if typed_question:
-
-        if st.button(
-            "🧒 Ask Gogy",
-            type="primary",
-            use_container_width=True,
-            key="gogy_ask_text"
-        ):
-
-            process_gogy_question(
-                typed_question
-            )
-
-    # =====================================================
-    # MICROPHONE QUESTION
-    # =====================================================
-
-    if voice_question:
-
-        audio_bytes = voice_question.getvalue()
-
-        with st.spinner(
-            "🧒 Gogy is listening... 👂"
-        ):
-
-            transcript = (
-                understand_voice_question(
-                    audio_bytes
-                )
-            )
-
-        if transcript:
-
-            st.session_state.voice_transcript = (
-                transcript
-            )
-
-            st.success(
-                "🧒 Gogy heard: "
-                + transcript
-            )
-
-            process_gogy_question(
-                transcript
-            )
-
-        else:
-
-            st.warning(
-                "Gogy couldn't understand that."
-                " Try speaking a little more clearly."
-            )
-
-
-# =========================================================
-# GOGY QUESTION PROCESSOR
-# =========================================================
-
-def process_gogy_question(question):
-
-    question = (
-        str(question)
-        .strip()
-    )
-
-    if not question:
-
-        return
-
-    with st.spinner(
-        "🧒 Gogy is looking through nature..."
-    ):
-
-        taxon = search_taxon_cached(
-            question
-        )
-
-        # -------------------------------------------------
-        # If direct search failed, ask Gemini
-        # to extract the organism name.
-        # -------------------------------------------------
-
-        if (
-            taxon is None
-            or taxon.get("error")
-        ):
-
-            if gemini_client:
-
-                try:
-
-                    prompt = f"""
-From the following user question,
-extract the name of the animal or plant
-the user wants information about.
-
-User question:
-{question}
-
-Return ONLY the organism name.
-
-If no organism can be identified,
-return:
-UNKNOWN
-"""
-
-                    response = (
-                        gemini_client
-                        .models
-                        .generate_content(
-                            model=GEMINI_MODELS[0],
-                            contents=prompt
-                        )
-                    )
-
-                    organism_name = (
-                        response.text
-                        .strip()
-                    )
-
-                    if (
-                        organism_name
-                        and organism_name.upper()
-                        != "UNKNOWN"
-                    ):
-
-                        taxon = (
-                            search_taxon_cached(
-                                organism_name
-                            )
-                        )
-
-                except Exception:
-
-                    pass
-
-        # -------------------------------------------------
-        # FOUND
-        # -------------------------------------------------
-
-        if (
-            taxon
-            and not taxon.get("error")
-        ):
-
-            taxon_id = taxon.get("id")
-
-            observations = []
-
-            if taxon_id:
-
-                observations = (
-                    get_observations_cached(
-                        taxon_id
-                    )
-                )
-
-            st.session_state.selected_taxon = (
-                taxon
-            )
-
-            st.session_state.selected_observations = (
-                observations
-            )
-
-            st.session_state.search_name = (
-                taxon.get(
-                    "preferred_common_name"
-                )
-                or taxon.get("name")
-                or question
-            )
-
-            st.session_state.page = "search"
-
-            st.rerun()
-
-        else:
-
-            st.warning(
-                "Awww... Gogy couldn't find "
-                "that organism yet. Try another name! 🥺"
-            )
-
-
-# =========================================================
-# TITLI — SPECIES AUDIO READER
-# =========================================================
-
-def show_titli_reader(taxon):
-
-    if not taxon:
-        return
-
-    common_name = (
-        taxon.get(
-            "preferred_common_name"
-        )
-        or taxon.get("name")
-        or "this organism"
-    )
-
-    scientific_name = (
-        taxon.get("name")
-        or ""
-    )
-
-    major_group = (
-        taxon.get(
-            "iconic_taxon_name"
-        )
-        or ""
-    )
-
-    # -----------------------------------------------------
-    # INFORMATION TEXT
-    # -----------------------------------------------------
-
-    reading_text = f"""
-Hello! I'm Titli! 🦋
-
-Ooooh! Today we're learning about
-{common_name}!
-
-Its scientific name is
-{scientific_name}.
-
-It belongs to the group
-{major_group}.
-
-Isn't nature amazing?
-
-Hehe! If you want to know more,
-keep exploring with me!
-"""
-
-    # -----------------------------------------------------
-    # CHARACTER CARD
-    # -----------------------------------------------------
-
-    st.markdown(
-        f"""
-        <style>
-
-        .titli-box {{
-
-            border-radius: 28px;
-
-            padding: 20px;
-
-            margin-top: 25px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    rgba(255,235,248,0.95),
-                    rgba(255,250,252,0.95)
-                );
-
-            border:
-                2px solid
-                rgba(230,130,190,0.30);
-
-            box-shadow:
-                0 10px 35px
-                rgba(0,0,0,0.08);
-
-        }}
-
-        .titli-character {{
-
-            font-size: 68px;
-
-            display: inline-block;
-
-            animation:
-                titliFly 2s
-                ease-in-out
-                infinite;
-
-        }}
-
-        @keyframes titliFly {{
-
-            0% {{
-                transform:
-                    translateY(0px)
-                    rotate(-4deg);
-            }}
-
-            50% {{
-                transform:
-                    translateY(-13px)
-                    rotate(4deg);
-            }}
-
-            100% {{
-                transform:
-                    translateY(0px)
-                    rotate(-4deg);
-            }}
-
-        }}
-
-        .titli-title {{
-
-            font-size: 27px;
-            font-weight: 800;
-
-        }}
-
-        </style>
-
-        <div class="titli-box">
-
-            <div class="titli-character">
-                👧🦋
-            </div>
-
-            <div class="titli-title">
-                Hiii! I'm Titli! 🌸
-            </div>
-
-            <p>
-                Ooooh! You want me to read this
-                for you? Hehe! 💕
-            </p>
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # -----------------------------------------------------
-    # READ / LISTEN CHOICE
-    # -----------------------------------------------------
-
-    st.markdown(
-        "### 📖 How do you want to explore?"
-    )
-
-    choice = st.radio(
-        "Choose",
-        [
-            "📖 I'll read it myself",
-            "🦋🔊 Let Titli read it"
-        ],
-        horizontal=True,
-        label_visibility="collapsed",
-        key="titli_mode"
-    )
-
-    if choice == "📖 I'll read it myself":
-
-        st.info(
-            "📖 Perfect! Take your time "
-            "and explore the information yourself."
-        )
-
-        return
-# -----------------------------------------------------
-    # TITLI READER
-    # -----------------------------------------------------
-
-    render_titli_audio_reader(
-        reading_text
-    )
-
-
-# =========================================================
-# TITLI AUDIO READER
-# =========================================================
-
-def render_titli_audio_reader(text):
-
-    safe_text = html.escape(
-        text
-    )
-
-    words = text.split()
-
-    word_html = ""
-
-    for index, word in enumerate(words):
-
-        word_html += (
-            f'<span class="word" '
-            f'data-index="{index}">'
-            f'{html.escape(word)}'
-            f'</span> '
-        )
-
-    components.html(
-
-        f"""
-        <style>
-
-        body {{
-            font-family:
-                Arial,
-                sans-serif;
-
-            background:
-                transparent;
-
-            margin: 0;
-            padding: 0;
-        }}
-
-        .reader {{
-
-            padding: 18px;
-
-            border-radius: 22px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #fff7fc,
-                    #f5fbff
-                );
-
-            border:
-                2px solid
-                rgba(220,150,200,0.25);
-
-        }}
-
-        .reader-title {{
-
-            font-size: 22px;
-            font-weight: 800;
-
-            margin-bottom: 12px;
-
-        }}
-
-        .reading-text {{
-
-            font-size: 19px;
-
-            line-height: 1.9;
-
-        }}
-
-        .word {{
-
-            padding:
-                2px 4px;
-
-            border-radius:
-                7px;
-
-            transition:
-                all 0.12s ease;
-
-        }}
-
-        .word.active {{
-
-            background:
-                #ffe58f;
-
-            transform:
-                scale(1.05);
-
-            display:
-                inline-block;
-
-            box-shadow:
-                0 2px 8px
-                rgba(0,0,0,0.10);
-
-        }}
-
-        .butterfly {{
-
-            display:
-                inline-block;
-
-            font-size:
-                25px;
-
-            margin-left:
-                5px;
-
-            animation:
-                flutter 0.7s
-                ease-in-out
-                infinite alternate;
-
-        }}
-
-        @keyframes flutter {{
-
-            from {{
-                transform:
-                    translateY(0px)
-                    rotate(-8deg);
-            }}
-
-            to {{
-                transform:
-                    translateY(-5px)
-                    rotate(8deg);
-            }}
-
-        }}
-
-        button {{
-
-            border: none;
-
-            border-radius: 12px;
-
-            padding:
-                10px 15px;
-
-            margin:
-                4px;
-
-            cursor: pointer;
-
-            font-size: 15px;
-
-        }}
-
-        </style>
-
-        <div class="reader">
-
-            <div class="reader-title">
-                🦋 Titli is ready!
-            </div>
-
-            <div
-                id="readingText"
-                class="reading-text"
-            >
-                {word_html}
-                <span
-                    id="butterfly"
-                    class="butterfly"
-                    style="display:none;"
-                >
-                    🦋
-                </span>
-            </div>
-
-            <br>
-
-            <button
-                onclick="startReading()"
-            >
-                ▶️ Listen
-            </button>
-
-            <button
-                onclick="pauseReading()"
-            >
-                ⏸️ Pause
-            </button>
-
-            <button
-                onclick="resumeReading()"
-            >
-                ▶️ Resume
-            </button>
-
-            <button
-                onclick="stopReading()"
-            >
-                ⏹️ Stop
-            </button>
-
-        </div>
-
-        <script>
-
-        const text =
-            {json.dumps(text)};
-
-        const words =
-            Array.from(
-                document.querySelectorAll(".word")
-            );
-
-        const butterfly =
-            document.getElementById(
-                "butterfly"
-            );
-
-        let speech = null;
-
-        function clearWords() {{
-
-            words.forEach(
-                w =>
-                    w.classList.remove(
-                        "active"
-                    )
-            );
-
-            butterfly.style.display =
-                "none";
-        }}
-
-        function startReading() {{
-
-            if (
-                !window.speechSynthesis
-            ) {{
-
-                alert(
-                    "Speech is not supported "
-                    + "in this browser."
-                );
-
-                return;
-            }}
-
-            window.speechSynthesis.cancel();
-
-            clearWords();
-
-            speech =
-                new SpeechSynthesisUtterance(
-                    text
-                );
-
-            /*
-             * Titli's personality:
-             *
-             * slightly youthful
-             * sweet
-             * playful
-             * expressive
-             */
-
-            speech.rate =
-                0.88;
-
-            speech.pitch =
-                1.48;
-
-            speech.volume =
-                1.0;
-
-            const voices =
-                window.speechSynthesis
-                .getVoices();
-
-            const femaleVoice =
-                voices.find(
-                    v =>
-                        v.lang &&
-                        v.lang
-                            .toLowerCase()
-                            .startsWith("en")
-                );
-
-            if (femaleVoice) {{
-                speech.voice =
-                    femaleVoice;
-            }}
-
-            speech.onboundary =
-                function(event) {{
-
-                    if (
-                        event.name !==
-                        "word"
-                    ) {{
-                        return;
-                    }}
-
-                    const characterIndex =
-                        event.charIndex;
-
-                    let currentIndex = 0;
-
-                    for (
-                        let i = 0;
-                        i < words.length;
-                        i++
-                    ) {{
-
-                        const word =
-                            words[i]
-                            .textContent;
-
-                        const start =
-                            currentIndex;
-
-                        const end =
-                            currentIndex
-                            + word.length;
-
-                        if (
-                            characterIndex >= start
-                            &&
-                            characterIndex <= end
-                        ) {{
-
-                            words.forEach(
-                                w =>
-                                    w.classList
-                                    .remove(
-                                        "active"
-                                    )
-                            );
-
-                            words[i]
-                                .classList
-                                .add(
-                                    "active"
-                                );
-
-                            butterfly.style.display =
-                                "inline-block";
-
-                            words[i]
-                                .after(
-                                    butterfly
-                                );
-
-                            break;
-                        }}
-
-                        currentIndex =
-                            end + 1;
-                    }}
-                }};
-
-            speech.onend =
-                function() {{
-
-                    clearWords();
-
-                }};
-
-            window.speechSynthesis
-                .speak(speech);
-
-        }}
-
-        function pauseReading() {{
-
-            if (
-                window.speechSynthesis
-            ) {{
-
-                window.speechSynthesis
-                    .pause();
-
-            }}
-
-        }}
-
-        function resumeReading() {{
-
-            if (
-                window.speechSynthesis
-            ) {{
-
-                window.speechSynthesis
-                    .resume();
-
-            }}
-
-        }}
-
-        function stopReading() {{
-
-            if (
-                window.speechSynthesis
-            ) {{
-
-                window.speechSynthesis
-                    .cancel();
-
-            }}
-
-            clearWords();
-
-        }}
-
-        </script>
-        """,
-
-        height=430
-    )
-
-
-# =========================================================
-# CHARACTER VOICE LAYER
-# =========================================================
-
-def show_character_layer():
-
-    # =====================================================
-    # HOME → GOGY
-    # =====================================================
-
-    if st.session_state.page == "home":
-
-        show_gogy_home()
-
-        if st.session_state.voice_enabled:
-
-            if not st.session_state.gogy_welcomed:
-
-                gogy_voice()
-
-                st.session_state.gogy_welcomed = True
-
-        show_gogy_controls()
-
-    # =====================================================
-    # SPECIES → TITLI
-    # =====================================================
-
-    if st.session_state.selected_taxon:
-
-        show_titli_reader(
-            st.session_state.selected_taxon
-        )
-
-
-# =========================================================
-# RUN THE NEW VOICE LAYER
-# =========================================================
-
-show_character_layer()
+    
+                             
+
+ 
+     
+ 
+ 
+                     
+ 
+
+ 
