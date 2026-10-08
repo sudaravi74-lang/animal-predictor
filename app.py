@@ -24,30 +24,23 @@ st.set_page_config(
 # =========================================================
 
 defaults = {
-
     "page": "home",
 
-    # Photo identification
     "image_bytes": None,
     "image_hash": None,
     "ai_result": None,
     "ai_model_used": None,
 
-    # Species
     "selected_taxon": None,
     "selected_observations": [],
 
-    # Search
     "search_name": "",
 
-    # Home image
     "home_nature_image": None,
 }
 
 for key, value in defaults.items():
-
     if key not in st.session_state:
-
         st.session_state[key] = value
 
 
@@ -79,7 +72,6 @@ HEADERS = {
 def search_taxon_cached(search_name):
 
     try:
-
         response = requests.get(
             INAT_TAXA_URL,
             params={
@@ -98,13 +90,10 @@ def search_taxon_cached(search_name):
         )
 
         if not results:
-
             return None
 
         search_lower = (
-            search_name
-            .strip()
-            .lower()
+            search_name.strip().lower()
         )
 
         # Exact common/scientific name first
@@ -126,10 +115,8 @@ def search_taxon_cached(search_name):
                 common_name == search_lower
                 or scientific_name == search_lower
             ):
-
                 return taxon
 
-        # Otherwise return best result
         return results[0]
 
     except Exception as e:
@@ -184,13 +171,11 @@ def get_observations_cached(taxon_id):
 def get_large_photo_url(photo):
 
     if not photo:
-
         return None
 
     url = photo.get("url")
 
     if not url:
-
         return None
 
     url = url.replace(
@@ -330,140 +315,17 @@ identify the broader organism.
     if not text.startswith("{"):
 
         start = text.find("{")
-
         end = text.rfind("}")
 
         if (
             start != -1
             and end != -1
         ):
+    
 
-            text = text[
-                start:end + 1
-            ]
+           #part 2
 
-    return json.loads(text)
-
-
-# =========================================================
-# GEMINI IDENTIFICATION CACHE
-# =========================================================
-
-@st.cache_data(
-    ttl=3600,
-    show_spinner=False
-)
-def identify_organism_cached(
-    image_bytes,
-    image_hash
-):
-
-    if gemini_client is None:
-
-        return {
-
-            "success": False,
-
-            "error":
-                "GEMINI_API_KEY is missing or invalid.",
-
-            "model": None
-        }
-
-    errors = []
-
-    for model_name in GEMINI_MODELS:
-
-        for attempt in range(2):
-
-            try:
-
-                result = (
-                    identify_with_model(
-                        image_bytes,
-                        model_name
-                    )
-                )
-
-                return {
-
-                    "success": True,
-
-                    "result": result,
-
-                    "model": model_name,
-
-                    "error": None
-                }
-
-            except Exception as e:
-
-                errors.append(
-                    f"{model_name} "
-                    f"attempt {attempt + 1}: "
-                    f"{str(e)}"
-                )
-
-                if attempt == 0:
-
-                    time.sleep(2)
-
-    return {
-
-        "success": False,
-
-        "error": "\n\n".join(
-            errors
-        ),
-
-        "model": None
-    }
-
-
-# =========================================================
-# DETERMINE ORGANISM TYPE
-# =========================================================
-
-def determine_organism_type(
-    taxon,
-    ai_result=None
-):
-
-    if ai_result:
-
-        ai_type = str(
-            ai_result.get(
-                "type",
-                ""
-            )
-        ).lower()
-
-        if ai_type in [
-            "animal",
-            "plant"
-        ]:
-
-            return ai_type
-
-    major_group = str(
-        taxon.get(
-            "iconic_taxon_name",
-            ""
-        )
-    ).lower()
-
-    if major_group == "plantae":
-
-        return "plant"
-
-    if major_group == "animalia":
-
-        return "animal"
-
-    return "organism"
-
-
-# =========================================================
+        # =========================================================
 # SPECIES PAGE
 # =========================================================
 
@@ -476,8 +338,7 @@ def show_species_page(
     if not taxon:
 
         st.warning(
-            "Species information "
-            "could not be found."
+            "Species information could not be found."
         )
 
         return
@@ -486,54 +347,36 @@ def show_species_page(
 
         st.error(
             "iNaturalist error: "
-            + str(
-                taxon["error"]
-            )
+            + str(taxon["error"])
         )
 
         return
 
     common_name = (
-
-        taxon.get(
-            "preferred_common_name"
-        )
-
+        taxon.get("preferred_common_name")
         or taxon.get("name")
-
         or "Unknown"
     )
 
     scientific_name = (
-
         taxon.get("name")
-
         or "Unknown"
     )
 
     rank = (
-
         taxon.get("rank")
-
         or "Unknown"
     )
 
     major_group = (
-
-        taxon.get(
-            "iconic_taxon_name"
-        )
-
+        taxon.get("iconic_taxon_name")
         or "Unknown"
     )
 
-    organism_type = (
-        determine_organism_type(
-            taxon,
-            ai_result
-        )
+    organism_type = determine_organism_type(
+        taxon,
+        ai_result
     )
-
 
     # =====================================================
     # HEADER
@@ -560,7 +403,6 @@ def show_species_page(
     st.markdown(
         f"### *{scientific_name}*"
     )
-
 
     # =====================================================
     # BASIC INFORMATION
@@ -609,23 +451,18 @@ def show_species_page(
                 "**Type:** 🌍 Living organism"
             )
 
-
     # =====================================================
     # MAIN PHOTO
     # =====================================================
 
     default_photo = (
-        taxon.get(
-            "default_photo"
-        )
+        taxon.get("default_photo")
     )
 
     if default_photo:
 
-        photo_url = (
-            get_large_photo_url(
-                default_photo
-            )
+        photo_url = get_large_photo_url(
+            default_photo
         )
 
         if photo_url:
@@ -639,17 +476,14 @@ def show_species_page(
                 use_container_width=True
             )
 
-
     # =====================================================
     # AI IDENTIFICATION DETAILS
     # =====================================================
 
     if ai_result:
 
-        confidence = (
-            ai_result.get(
-                "confidence"
-            )
+        confidence = ai_result.get(
+            "confidence"
         )
 
         if confidence is not None:
@@ -659,11 +493,9 @@ def show_species_page(
                 f"{confidence}%"
             )
 
-        reason = (
-            ai_result.get(
-                "reason",
-                ""
-            )
+        reason = ai_result.get(
+            "reason",
+            ""
         )
 
         if reason:
@@ -673,38 +505,42 @@ def show_species_page(
                 f"{reason}"
             )
 
+    # =====================================================
+    # MORE INFORMATION
+    # =====================================================
 
-     # =====================================================
-# MORE INFORMATION
-# =====================================================
+    st.divider()
 
-st.divider()
+    st.subheader(
+        "🔬 More Information"
+    )
 
-st.subheader("🔬 More Information")
+    taxon_id = taxon.get("id")
 
-st.write(
-    "Want to learn more about this species?"
-)
+    if taxon_id:
 
-inat_url = f"https://www.inaturalist.org/taxa/{taxon_id}"
+        inat_url = (
+            "https://www.inaturalist.org/taxa/"
+            + str(taxon_id)
+        )
 
-st.link_button(
-    "🌿 Explore More on iNaturalist",
-    inat_url,
-    use_container_width=True
-)
+        st.link_button(
+            "🌿 Explore on iNaturalist",
+            inat_url,
+            use_container_width=True
+        )
 
-st.caption(
-    "iNaturalist provides additional information, "
-    "observations, photographs and species details."
-)
-
+    st.caption(
+        "Explore iNaturalist for additional "
+        "species information, observations "
+        "and photographs."
+    )
 
     # =====================================================
     # MORE PHOTOS
     # =====================================================
 
-if observations:
+    if observations:
 
         st.divider()
 
@@ -716,11 +552,9 @@ if observations:
 
         for observation in observations:
 
-            photos = (
-                observation.get(
-                    "photos",
-                    []
-                )
+            photos = observation.get(
+                "photos",
+                []
             )
 
             if photos:
@@ -745,31 +579,6 @@ if observations:
             )
 
 
-    # =====================================================
-    # iNATURALIST SOURCE
-    # =====================================================
-
-taxon_id = texon.get("id")
-
-if taxon_id:
-    inat_url = (
-        "https://www.inaturalist.org/taxa/"
-        + str(taxon_id)
-    )
-
-      st.markdown("### 🔬 More Information")
-
-     st.link_button(
-         "🌿 Explore on iNaturalist",
-         inat_url,
-         use_container_width=True
-                  )
-         
-
-    
-
-
-
 # =========================================================
 # HOME
 # =========================================================
@@ -791,7 +600,6 @@ def show_home():
 
     st.divider()
 
-
     # =====================================================
     # HOME EXAMPLE IMAGE
     # =====================================================
@@ -802,16 +610,12 @@ def show_home():
     ):
 
         example_taxon = (
-            search_taxon_cached(
-                "tiger"
-            )
+            search_taxon_cached("tiger")
         )
 
         if (
             example_taxon
-            and not example_taxon.get(
-                "error"
-            )
+            and not example_taxon.get("error")
         ):
 
             st.session_state.home_nature_image = (
@@ -822,7 +626,6 @@ def show_home():
                 )
             )
 
-
     # =====================================================
     # TWO OPTIONS
     # =====================================================
@@ -831,7 +634,6 @@ def show_home():
         2,
         gap="large"
     )
-
 
     # =====================================================
     # EXPLORE FLORA & FAUNA
@@ -844,13 +646,11 @@ def show_home():
         ):
 
             if (
-                st.session_state
-                .home_nature_image
+                st.session_state.home_nature_image
             ):
 
                 st.image(
-                    st.session_state
-                    .home_nature_image,
+                    st.session_state.home_nature_image,
                     use_container_width=True
                 )
 
@@ -892,7 +692,6 @@ def show_home():
 
                 st.rerun()
 
-
     # =====================================================
     # IDENTIFY FROM PHOTO
     # =====================================================
@@ -929,7 +728,6 @@ def show_home():
 
                 st.rerun()
 
-
     st.divider()
 
     st.info(
@@ -944,16 +742,11 @@ def show_home():
 
 def show_search():
 
-    if st.button(
-        "← Home"
-    ):
+    if st.button("← Home"):
 
-        st.session_state.page = (
-            "home"
-        )
+        st.session_state.page = "home"
 
         st.rerun()
-
 
     st.title(
         "🌿 Explore Flora & Fauna"
@@ -963,7 +756,6 @@ def show_search():
         "Search for an animal or plant "
         "by common or scientific name."
     )
-
 
     # =====================================================
     # SEARCH FORM
@@ -984,13 +776,10 @@ def show_search():
             )
         )
 
-        submitted = (
-            st.form_submit_button(
-                "🔎 Search",
-                use_container_width=True
-            )
+        submitted = st.form_submit_button(
+            "🔎 Search",
+            use_container_width=True
         )
-
 
     # =====================================================
     # SEARCH
@@ -1014,22 +803,16 @@ def show_search():
             "Finding this organism..."
         ):
 
-            taxon = (
-                search_taxon_cached(
-                    search_name.strip()
-                )
+            taxon = search_taxon_cached(
+                search_name.strip()
             )
 
             if (
                 taxon
-                and not taxon.get(
-                    "error"
-                )
+                and not taxon.get("error")
             ):
 
-                taxon_id = (
-                    taxon.get("id")
-                )
+                taxon_id = taxon.get("id")
 
                 observations = []
 
@@ -1051,19 +834,15 @@ def show_search():
 
                 st.rerun()
 
-
             elif (
                 taxon
                 and taxon.get("error")
             ):
 
                 st.error(
-                    "iNaturalist error: "
-                    + str(
-                        taxon["error"]
-                    )
+                    "iNaturalist error
+                    str(taxon["error"])
                 )
-
 
             else:
 
@@ -1071,22 +850,22 @@ def show_search():
                     "No matching organism was found."
                 )
 
-
     # =====================================================
     # SHOW SPECIES
     # =====================================================
 
-    if (
-        st.session_state.selected_taxon
-    ):
+    if st.session_state.selected_taxon:
 
         show_species_page(
-
             st.session_state.selected_taxon,
-
-            st.session_state
-            .selected_observations
+            st.session_state.selected_observations
         )
+        
+        #part 3
+        # =========================================================
+# PART 3
+# PHOTO IDENTIFICATION + APP ROUTER
+# =========================================================
 
 
 # =========================================================
@@ -1095,16 +874,11 @@ def show_search():
 
 def show_identify():
 
-    if st.button(
-        "← Home"
-    ):
+    if st.button("← Home"):
 
-        st.session_state.page = (
-            "home"
-        )
+        st.session_state.page = "home"
 
         st.rerun()
-
 
     st.title(
         "📷 Identify an Animal or Plant"
@@ -1114,7 +888,6 @@ def show_identify():
         "Upload a photograph and AI will "
         "try to identify the organism."
     )
-
 
     # =====================================================
     # UPLOAD
@@ -1130,17 +903,13 @@ def show_identify():
         ]
     )
 
-
     if uploaded_file:
 
-        image_bytes = (
-            uploaded_file.getvalue()
-        )
+        image_bytes = uploaded_file.getvalue()
 
         image_hash = hashlib.sha256(
             image_bytes
         ).hexdigest()
-
 
         # =================================================
         # NEW IMAGE
@@ -1159,22 +928,13 @@ def show_identify():
                 image_hash
             )
 
-            st.session_state.ai_result = (
-                None
-            )
+            st.session_state.ai_result = None
 
-            st.session_state.ai_model_used = (
-                None
-            )
+            st.session_state.ai_model_used = None
 
-            st.session_state.selected_taxon = (
-                None
-            )
+            st.session_state.selected_taxon = None
 
-            st.session_state.selected_observations = (
-                []
-            )
-
+            st.session_state.selected_observations = []
 
     # =====================================================
     # DISPLAY IMAGE
@@ -1193,7 +953,6 @@ def show_identify():
             caption="Uploaded Photograph",
             use_container_width=True
         )
-
 
         # =================================================
         # IDENTIFY BUTTON
@@ -1216,15 +975,10 @@ def show_identify():
 
                     result = (
                         identify_organism_cached(
-
-                            st.session_state
-                            .image_bytes,
-
-                            st.session_state
-                            .image_hash
+                            st.session_state.image_bytes,
+                            st.session_state.image_hash
                         )
                     )
-
 
                 if result["success"]:
 
@@ -1237,7 +991,6 @@ def show_identify():
                     )
 
                     st.rerun()
-
 
                 else:
 
@@ -1253,7 +1006,6 @@ def show_identify():
                         st.code(
                             result["error"]
                         )
-
 
         # =================================================
         # AI RESULT
@@ -1300,7 +1052,6 @@ def show_identify():
                 )
             )
 
-
             if (
                 organism_type.lower()
                 == "plant"
@@ -1318,12 +1069,10 @@ def show_identify():
                     f"**{common_name}**"
                 )
 
-
             st.metric(
                 "AI Confidence",
                 f"{confidence}%"
             )
-
 
             if scientific_name:
 
@@ -1332,22 +1081,20 @@ def show_identify():
                     f"*{scientific_name}*"
                 )
 
-
             if reason:
 
                 st.write(
                     f"**Why:** {reason}"
                 )
 
-
             if st.session_state.ai_model_used:
 
                 st.caption(
                     "AI model: "
-                    + st.session_state
-                    .ai_model_used
+                    + st.session_state.ai_model_used
                 )
-# =============================================
+
+            # =============================================
             # FIND iNATURALIST SPECIES
             # =============================================
 
@@ -1382,18 +1129,13 @@ def show_identify():
                                 )
                             )
 
-
                         if (
                             taxon
-                            and not taxon.get(
-                                "error"
-                            )
+                            and not taxon.get("error")
                         ):
 
                             taxon_id = (
-                                taxon.get(
-                                    "id"
-                                )
+                                taxon.get("id")
                             )
 
                             observations = []
@@ -1406,7 +1148,6 @@ def show_identify():
                                     )
                                 )
 
-
                             st.session_state.selected_taxon = (
                                 taxon
                             )
@@ -1417,7 +1158,6 @@ def show_identify():
 
                             st.rerun()
 
-
                         else:
 
                             st.warning(
@@ -1425,7 +1165,6 @@ def show_identify():
                                 "but no matching iNaturalist "
                                 "taxon was found."
                             )
-
 
             # =============================================
             # SPECIES PAGE
@@ -1436,16 +1175,10 @@ def show_identify():
             ):
 
                 show_species_page(
-
-                    st.session_state
-                    .selected_taxon,
-
-                    st.session_state
-                    .selected_observations,
-
+                    st.session_state.selected_taxon,
+                    st.session_state.selected_observations,
                     ai_result=result
                 )
-
 
     else:
 
@@ -1478,3 +1211,5 @@ elif (
 ):
 
     show_identify()
+            
+            
