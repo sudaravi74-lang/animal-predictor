@@ -1,3 +1,5 @@
 streamlit
 scikit-learn
-tensorflow
+torch
+transformers
+Pillow
