@@ -8,7 +8,7 @@ from google import genai
 
 
 # =========================================================
-# PAGE SETTINGS
+# PAGE
 # =========================================================
 
 st.set_page_config(
@@ -19,72 +19,12 @@ st.set_page_config(
 
 
 # =========================================================
-# CUSTOM STYLE
-# =========================================================
-
-st.markdown("""
-<style>
-
-.main-title {
-    text-align: center;
-    font-size: 42px;
-    font-weight: 800;
-    margin-bottom: 5px;
-}
-
-.subtitle {
-    text-align: center;
-    font-size: 18px;
-    color: #666;
-    margin-bottom: 30px;
-}
-
-.option-card {
-    border: 2px solid #e2e2e2;
-    border-radius: 18px;
-    padding: 25px;
-    text-align: center;
-    min-height: 190px;
-    background: #fafafa;
-    margin-bottom: 15px;
-}
-
-.option-icon {
-    font-size: 48px;
-}
-
-.option-title {
-    font-size: 24px;
-    font-weight: 700;
-    margin-top: 10px;
-}
-
-.option-text {
-    font-size: 16px;
-    color: #666;
-    margin-top: 8px;
-}
-
-.section-title {
-    text-align: center;
-    font-size: 30px;
-    font-weight: 700;
-    margin-top: 20px;
-    margin-bottom: 20px;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# =========================================================
 # SESSION STATE
 # =========================================================
 
 defaults = {
     "page": "home",
     "image_bytes": None,
-    "image_name": None,
     "image_hash": None,
     "ai_result": None,
     "ai_model_used": None,
@@ -94,9 +34,130 @@ defaults = {
 }
 
 for key, value in defaults.items():
-
     if key not in st.session_state:
         st.session_state[key] = value
+
+
+# =========================================================
+# iNATURALIST
+# =========================================================
+
+TAXA_URL = "https://api.inaturalist.org/v1/taxa/autocomplete"
+
+OBSERVATIONS_URL = "https://api.inaturalist.org/v1/observations"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def search_taxon_cached(animal_name):
+
+    try:
+
+        response = requests.get(
+            TAXA_URL,
+            params={
+                "q": animal_name,
+                "per_page": 10
+            },
+            timeout=15
+        )
+
+        response.raise_for_status()
+
+        results = response.json().get(
+            "results",
+            []
+        )
+
+        if not results:
+            return None
+
+        search_name = animal_name.lower().strip()
+
+        # Prefer exact common/scientific name
+        for taxon in results:
+
+            common = (
+                taxon.get(
+                    "preferred_common_name"
+                )
+                or ""
+            ).lower()
+
+            scientific = (
+                taxon.get("name")
+                or ""
+            ).lower()
+
+            if (
+                common == search_name
+                or scientific == search_name
+            ):
+                return taxon
+
+        return results[0]
+
+    except Exception as e:
+
+        return {
+            "error": str(e)
+        }
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_observations_cached(taxon_id):
+
+    try:
+
+        response = requests.get(
+            OBSERVATIONS_URL,
+            params={
+                "taxon_id": taxon_id,
+                "photos": "true",
+                "quality_grade": "research",
+                "order_by": "votes",
+                "order": "desc",
+                "per_page": 6
+            },
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        return response.json().get(
+            "results",
+            []
+        )
+
+    except Exception:
+        return []
+
+
+def get_large_photo_url(photo):
+
+    if not photo:
+        return None
+
+    url = photo.get("url")
+
+    if not url:
+        return None
+
+    url = url.replace(
+        "/square.",
+        "/large."
+    )
+
+    url = url.replace(
+        "/small.",
+        "/large."
+    )
+
+    url = url.replace(
+        "/medium.",
+        "/large."
+    )
+
+    return url
 
 
 # =========================================================
@@ -116,38 +177,11 @@ except Exception:
     gemini_client = None
 
 
-# =========================================================
-# GEMINI MODELS
-# =========================================================
-
 GEMINI_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash",
 ]
-
-
-def is_temporary_error(error_text):
-
-    temporary_codes = [
-        "503",
-        "UNAVAILABLE",
-        "429",
-        "RESOURCE_EXHAUSTED",
-        "408",
-        "TIMEOUT",
-        "500",
-        "502",
-        "504",
-        "INTERNAL"
-    ]
-
-    error_upper = str(error_text).upper()
-
-    return any(
-        code in error_upper
-        for code in temporary_codes
-    )
 
 
 def identify_with_model(
@@ -162,22 +196,21 @@ def identify_with_model(
     prompt = """
 Identify the animal in this image.
 
-Return ONLY valid JSON in exactly this format:
+Return ONLY valid JSON:
 
 {
   "animal": "common animal name",
   "scientific_name": "scientific name if reasonably identifiable, otherwise empty string",
   "confidence": 0,
-  "reason": "short explanation based only on visible features"
+  "reason": "short visual explanation"
 }
 
 Rules:
 
-- Identify the animal visible in the image.
-- Do not invent a species if the image does not allow species-level identification.
-- If only the broader animal group is clear, give the broader common name.
-- Confidence must be a number from 0 to 100.
-- Keep the reason short.
+- Identify the visible animal.
+- Do not invent a species.
+- If species identification is uncertain, give the broader animal name.
+- Confidence must be from 0 to 100.
 - Return JSON only.
 """
 
@@ -206,6 +239,30 @@ Rules:
         text = text.strip()
 
     return json.loads(text)
+
+
+def is_temporary_error(error_text):
+
+    error_text = str(
+        error_text
+    ).upper()
+
+    temporary_codes = [
+        "503",
+        "UNAVAILABLE",
+        "429",
+        "RESOURCE_EXHAUSTED",
+        "408",
+        "TIMEOUT",
+        "500",
+        "502",
+        "504"
+    ]
+
+    return any(
+        code in error_text
+        for code in temporary_codes
+    )
 
 
 @st.cache_data(
@@ -245,18 +302,11 @@ def identify_animal_cached(
 
         except Exception as e:
 
-            error_text = str(e)
-
             errors.append(
-                f"{model_name}: {error_text}"
+                f"{model_name}: {str(e)}"
             )
 
-            # Try the next available model
-            if is_temporary_error(
-                error_text
-            ):
-                continue
-
+            # Automatically move to another model
             continue
 
     return {
@@ -267,400 +317,158 @@ def identify_animal_cached(
 
 
 # =========================================================
-# iNATURALIST
-# =========================================================
-
-INATURALIST_TAXA_URL = (
-    "https://api.inaturalist.org/v1/taxa/autocomplete"
-)
-
-INATURALIST_OBSERVATIONS_URL = (
-    "https://api.inaturalist.org/v1/observations"
-)
-
-
-@st.cache_data(
-    ttl=3600,
-    show_spinner=False
-)
-def search_taxon_cached(
-    animal_name
-):
-
-    try:
-
-        response = requests.get(
-            INATURALIST_TAXA_URL,
-            params={
-                "q": animal_name,
-                "per_page": 10
-            },
-            timeout=15
-        )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        results = data.get(
-            "results",
-            []
-        )
-
-        if not results:
-            return None
-
-        animal_lower = (
-            animal_name
-            .lower()
-            .strip()
-        )
-
-        # Prefer exact match
-        for taxon in results:
-
-            preferred = (
-                taxon.get(
-                    "preferred_common_name"
-                )
-                or ""
-            ).lower()
-
-            name = (
-                taxon.get("name")
-                or ""
-            ).lower()
-
-            if (
-                preferred == animal_lower
-                or name == animal_lower
-            ):
-
-                return taxon
-
-        return results[0]
-
-    except Exception as e:
-
-        return {
-            "error": str(e)
-        }
-
-
-@st.cache_data(
-    ttl=3600,
-    show_spinner=False
-)
-def get_observations_cached(
-    taxon_id
-):
-
-    try:
-
-        response = requests.get(
-            INATURALIST_OBSERVATIONS_URL,
-            params={
-                "taxon_id": taxon_id,
-                "photos": "true",
-                "quality_grade": "research",
-                "order_by": "votes",
-                "order": "desc",
-                "per_page": 6
-            },
-            timeout=20
-        )
-
-        response.raise_for_status()
-
-        data = response.json()
-
-        return data.get(
-            "results",
-            []
-        )
-
-    except Exception:
-
-        return []
-
-
-def get_large_photo_url(photo):
-
-    if not photo:
-        return None
-
-    url = photo.get("url")
-
-    if not url:
-        return None
-
-    url = url.replace(
-        "/square.",
-        "/large."
-    )
-
-    url = url.replace(
-        "/small.",
-        "/large."
-    )
-
-    url = url.replace(
-        "/medium.",
-        "/large."
-    )
-
-    return url
-
-
-# =========================================================
-# DISPLAY iNATURALIST RESULT
-# =========================================================
-
-def display_database_result(
-    taxon,
-    observations
-):
-
-    if not taxon:
-
-        st.warning(
-            "No biodiversity information was found."
-        )
-
-        return
-
-    if taxon.get("error"):
-
-        st.error(
-            "iNaturalist error: "
-            + str(taxon["error"])
-        )
-
-        return
-
-    common_name = (
-        taxon.get(
-            "preferred_common_name"
-        )
-        or taxon.get("name")
-        or "Unknown"
-    )
-
-    scientific_name = (
-        taxon.get("name")
-        or "Unknown"
-    )
-
-    rank = (
-        taxon.get("rank")
-        or "Unknown"
-    )
-
-    major_group = (
-        taxon.get(
-            "iconic_taxon_name"
-        )
-        or "Unknown"
-    )
-
-    st.divider()
-
-    st.subheader(
-        "🌍 iNaturalist Information"
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.markdown(
-            f"**Common name:** {common_name}"
-        )
-
-        st.markdown(
-            f"**Scientific name:** "
-            f"*{scientific_name}*"
-        )
-
-    with col2:
-
-        st.markdown(
-            f"**Taxonomic rank:** {rank}"
-        )
-
-        st.markdown(
-            f"**Major group:** {major_group}"
-        )
-
-    # Main photo
-    default_photo = taxon.get(
-        "default_photo"
-    )
-
-    if default_photo:
-
-        photo_url = get_large_photo_url(
-            default_photo
-        )
-
-        if photo_url:
-
-            st.subheader(
-                "📸 Species Photograph"
-            )
-
-            st.image(
-                photo_url,
-                use_container_width=True
-            )
-
-    # More photos
-    if observations:
-
-        st.subheader(
-            "📷 More iNaturalist Observations"
-        )
-
-        photo_urls = []
-
-        for observation in observations:
-
-            photos = observation.get(
-                "photos",
-                []
-            )
-
-            if photos:
-
-                photo_url = get_large_photo_url(
-                    photos[0]
-                )
-
-                if photo_url:
-
-                    photo_urls.append(
-                        photo_url
-                    )
-
-        if photo_urls:
-
-            st.image(
-                photo_urls,
-                use_container_width=True
-            )
-
-    # iNaturalist link
-    taxon_id = taxon.get("id")
-
-    if taxon_id:
-
-        inat_url = (
-            "https://www.inaturalist.org/taxa/"
-            + str(taxon_id)
-        )
-
-        st.markdown(
-            f"🔗 [View this animal on iNaturalist]"
-            f"({inat_url})"
-        )
-
-
-# =========================================================
 # HOME PAGE
 # =========================================================
 
 def show_home():
 
-    st.markdown(
-        '<div class="main-title">🐾 Animal Encyclopedia AI</div>',
-        unsafe_allow_html=True
-    )
+    st.title("🐾 Animal Encyclopedia AI")
 
     st.markdown(
-        '<div class="subtitle">'
-        'Identify animals with AI or explore biodiversity information from iNaturalist.'
-        '</div>',
-        unsafe_allow_html=True
+        "### Explore the animal world"
     )
 
-    st.markdown(
-        '<div class="section-title">'
-        'How do you want to explore?'
-        '</div>',
-        unsafe_allow_html=True
+    st.write(
+        "Identify an animal from a photograph "
+        "or search directly through biodiversity data."
     )
+
+    st.divider()
+
+    st.subheader(
+        "What would you like to do?"
+    )
+
+    # -----------------------------------------------------
+    # Get beautiful iNaturalist images for cards
+    # -----------------------------------------------------
+
+    rabbit = search_taxon_cached("rabbit")
+    fox = search_taxon_cached("fox")
+
+    rabbit_image = None
+    fox_image = None
+
+    if rabbit and not rabbit.get("error"):
+
+        rabbit_photo = rabbit.get(
+            "default_photo"
+        )
+
+        rabbit_image = get_large_photo_url(
+            rabbit_photo
+        )
+
+    if fox and not fox.get("error"):
+
+        fox_photo = fox.get(
+            "default_photo"
+        )
+
+        fox_image = get_large_photo_url(
+            fox_photo
+        )
+
+    # -----------------------------------------------------
+    # TWO NATIVE STREAMLIT CARDS
+    # -----------------------------------------------------
 
     col1, col2 = st.columns(
         2,
         gap="large"
     )
 
+    # =====================================================
+    # IDENTIFY CARD
+    # =====================================================
+
     with col1:
 
-        st.markdown(
-            """
-            <div class="option-card">
+        with st.container(border=True):
 
-                <div class="option-icon">📷</div>
+            if rabbit_image:
 
-                <div class="option-title">
-                    Identify an Animal
-                </div>
+                st.image(
+                    rabbit_image,
+                    use_container_width=True
+                )
 
-                <div class="option-text">
-                    Upload a photo and let AI
-                    identify the animal.
-                </div>
+            else:
 
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                st.markdown(
+                    "## 🐰"
+                )
 
-        if st.button(
-            "📷  IDENTIFY AN ANIMAL",
-            use_container_width=True,
-            type="primary"
-        ):
-
-            st.session_state.page = (
-                "identify"
+            st.subheader(
+                "📷 Identify an Animal"
             )
 
-            st.rerun()
+            st.write(
+                "Upload a photograph and let AI "
+                "identify the animal."
+            )
+
+            if st.button(
+                "📷 Identify an Animal",
+                type="primary",
+                use_container_width=True,
+                key="identify_home"
+            ):
+
+                st.session_state.page = (
+                    "identify"
+                )
+
+                st.rerun()
+
+    # =====================================================
+    # SEARCH CARD
+    # =====================================================
 
     with col2:
 
-        st.markdown(
-            """
-            <div class="option-card">
+        with st.container(border=True):
 
-                <div class="option-icon">🔎</div>
+            if fox_image:
 
-                <div class="option-title">
-                    Search an Animal
-                </div>
+                st.image(
+                    fox_image,
+                    use_container_width=True
+                )
 
-                <div class="option-text">
-                    Search any animal and
-                    explore its biodiversity information.
-                </div>
+            else:
 
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                st.markdown(
+                    "## 🦊"
+                )
 
-        if st.button(
-            "🔎  SEARCH AN ANIMAL",
-            use_container_width=True
-        ):
-
-            st.session_state.page = (
-                "search"
+            st.subheader(
+                "🔎 Search an Animal"
             )
 
-            st.rerun()
+            st.write(
+                "Search any animal and explore "
+                "its biodiversity information."
+            )
+
+            if st.button(
+                "🔎 Search an Animal",
+                use_container_width=True,
+                key="search_home"
+            ):
+
+                st.session_state.page = (
+                    "search"
+                )
+
+                st.rerun()
+
+    st.divider()
+
+    st.caption(
+        "🌍 Biodiversity information and photographs "
+        "are provided through iNaturalist."
+    )
 
 
 # =========================================================
@@ -669,30 +477,16 @@ def show_home():
 
 def show_identify():
 
-    col_back, col_title = st.columns(
-        [1, 5]
-    )
+    if st.button("← Home"):
 
-    with col_back:
+        st.session_state.page = "home"
 
-        if st.button(
-            "← Home"
-        ):
+        st.rerun()
 
-            st.session_state.page = (
-                "home"
-            )
-
-            st.rerun()
-
-    with col_title:
-
-        st.header(
-            "📷 Identify an Animal"
-        )
+    st.title("📷 Identify an Animal")
 
     st.write(
-        "Upload a clear photo of an animal."
+        "Upload a clear photograph of an animal."
     )
 
     uploaded_file = st.file_uploader(
@@ -705,31 +499,26 @@ def show_identify():
         ]
     )
 
-    if uploaded_file is not None:
+    if uploaded_file:
 
-        new_bytes = (
-            uploaded_file.getvalue()
-        )
+        image_bytes = uploaded_file.getvalue()
 
-        new_hash = hashlib.sha256(
-            new_bytes
+        image_hash = hashlib.sha256(
+            image_bytes
         ).hexdigest()
 
+        # Detect a new image
         if (
             st.session_state.image_hash
-            != new_hash
+            != image_hash
         ):
 
             st.session_state.image_bytes = (
-                new_bytes
-            )
-
-            st.session_state.image_name = (
-                uploaded_file.name
+                image_bytes
             )
 
             st.session_state.image_hash = (
-                new_hash
+                image_hash
             )
 
             st.session_state.ai_result = None
@@ -753,11 +542,14 @@ def show_identify():
             use_container_width=True
         )
 
-        # Identify button
+        # -------------------------------------------------
+        # AI IDENTIFICATION
+        # -------------------------------------------------
+
         if st.session_state.ai_result is None:
 
             if st.button(
-                "🔍 IDENTIFY ANIMAL",
+                "🔍 Identify Animal",
                 type="primary",
                 use_container_width=True
             ):
@@ -788,12 +580,12 @@ def show_identify():
                 else:
 
                     st.error(
-                        "The AI services are temporarily unavailable."
+                        "AI is temporarily unavailable."
                     )
 
                     st.info(
-                        "The app automatically tried multiple "
-                        "AI models. Please try again shortly."
+                        "The app automatically tried "
+                        "multiple AI models. Please try again."
                     )
 
                     with st.expander(
@@ -804,7 +596,10 @@ def show_identify():
                             result["error"]
                         )
 
-        # AI result
+        # -------------------------------------------------
+        # RESULT
+        # -------------------------------------------------
+
         if st.session_state.ai_result:
 
             result = (
@@ -842,18 +637,21 @@ def show_identify():
 
             if scientific_name:
 
-                st.markdown(
+                st.write(
                     f"**Possible scientific name:** "
                     f"*{scientific_name}*"
                 )
 
             if reason:
 
-                st.markdown(
+                st.write(
                     f"**Why:** {reason}"
                 )
 
-            # iNaturalist
+            # -------------------------------------------------
+            # iNATURALIST
+            # -------------------------------------------------
+
             if not st.session_state.database_loaded:
 
                 st.divider()
@@ -863,12 +661,12 @@ def show_identify():
                 )
 
                 st.write(
-                    "Get species information and "
-                    "photographs from iNaturalist."
+                    "Get biodiversity information "
+                    "and photographs from iNaturalist."
                 )
 
                 if st.button(
-                    "🌍 GET SPECIES INFORMATION",
+                    "🌍 Get Species Information",
                     type="primary",
                     use_container_width=True
                 ):
@@ -928,7 +726,164 @@ def show_identify():
     else:
 
         st.info(
-            "📷 Upload an animal photo above to begin."
+            "📷 Upload an animal photograph to begin."
+        )
+
+
+# =========================================================
+# DATABASE RESULT
+# =========================================================
+
+def display_database_result(
+    taxon,
+    observations
+):
+
+    if not taxon:
+
+        st.warning(
+            "No information was found."
+        )
+
+        return
+
+    if taxon.get("error"):
+
+        st.error(
+            "iNaturalist error: "
+            + str(taxon["error"])
+        )
+
+        return
+
+    common_name = (
+        taxon.get(
+            "preferred_common_name"
+        )
+        or taxon.get("name")
+        or "Unknown"
+    )
+
+    scientific_name = (
+        taxon.get("name")
+        or "Unknown"
+    )
+
+    rank = (
+        taxon.get("rank")
+        or "Unknown"
+    )
+
+    major_group = (
+        taxon.get(
+            "iconic_taxon_name"
+        )
+        or "Unknown"
+    )
+
+    st.divider()
+
+    st.subheader(
+        "🌍 iNaturalist Information"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.write(
+            f"**Common name:** {common_name}"
+        )
+
+        st.write(
+            f"**Scientific name:** "
+            f"*{scientific_name}*"
+        )
+
+    with col2:
+
+        st.write(
+            f"**Taxonomic rank:** {rank}"
+        )
+
+        st.write(
+            f"**Major group:** {major_group}"
+        )
+
+    # Main photo
+
+    default_photo = taxon.get(
+        "default_photo"
+    )
+
+    if default_photo:
+
+        photo_url = get_large_photo_url(
+            default_photo
+        )
+
+        if photo_url:
+
+            st.subheader(
+                "📸 Species Photograph"
+            )
+
+            st.image(
+                photo_url,
+                use_container_width=True
+            )
+
+    # More photos
+
+    if observations:
+
+        st.subheader(
+            "📷 More Photographs"
+        )
+
+        photo_urls = []
+
+        for observation in observations:
+
+            photos = observation.get(
+                "photos",
+                []
+            )
+
+            if photos:
+
+                photo_url = (
+                    get_large_photo_url(
+                        photos[0]
+                    )
+                )
+
+                if photo_url:
+
+                    photo_urls.append(
+                        photo_url
+                    )
+
+        if photo_urls:
+
+            st.image(
+                photo_urls,
+                use_container_width=True
+            )
+
+    # iNaturalist page
+
+    taxon_id = taxon.get("id")
+
+    if taxon_id:
+
+        url = (
+            "https://www.inaturalist.org/taxa/"
+            + str(taxon_id)
+        )
+
+        st.markdown(
+            f"🔗 [View this animal on iNaturalist]({url})"
         )
 
 
@@ -938,33 +893,20 @@ def show_identify():
 
 def show_search():
 
-    col_back, col_title = st.columns(
-        [1, 5]
-    )
+    if st.button("← Home"):
 
-    with col_back:
+        st.session_state.page = "home"
 
-        if st.button(
-            "← Home"
-        ):
+        st.rerun()
 
-            st.session_state.page = (
-                "home"
-            )
-
-            st.rerun()
-
-    with col_title:
-
-        st.header(
-            "🔎 Search Animal"
-        )
+    st.title("🔎 Search an Animal")
 
     st.write(
-        "Search for any animal directly in iNaturalist."
+        "Search any animal directly through "
+        "the iNaturalist biodiversity database."
     )
 
-    search_name = st.text_input(
+    animal_name = st.text_input(
         "Animal name",
         placeholder=(
             "Example: Rabbit, Tiger, Eagle, Frog..."
@@ -972,12 +914,12 @@ def show_search():
     )
 
     if st.button(
-        "🔎 SEARCH ANIMAL",
+        "🔎 Search Animal",
         type="primary",
         use_container_width=True
     ):
 
-        if not search_name.strip():
+        if not animal_name.strip():
 
             st.warning(
                 "Please enter an animal name."
@@ -991,14 +933,13 @@ def show_search():
 
                 taxon = (
                     search_taxon_cached(
-                        search_name.strip()
+                        animal_name.strip()
                     )
                 )
 
                 if (
                     taxon
-                    and not
-        taxon.get(
+                    and not taxon.get(
                         "error"
                     )
                 ):
@@ -1013,7 +954,7 @@ def show_search():
 
                         observations = (
                             get_observations_cached(
-                                taxon_id
+                 taxon_id
                             )
                         )
 
@@ -1022,9 +963,8 @@ def show_search():
                         observations
                     )
 
-                elif (
-                    taxon
-                    and taxon.get("error")
+                elif taxon and taxon.get(
+                    "error"
                 ):
 
                     st.error(
@@ -1040,7 +980,7 @@ def show_search():
 
 
 # =========================================================
-# PAGE ROUTER
+# APP ROUTER
 # =========================================================
 
 if st.session_state.page == "home":
