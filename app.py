@@ -873,6 +873,7 @@ def show_species_page(
                         "ecology",
                         "Information unavailable."
                     )
+                )
 
     # -----------------------------------------------------
     # MORE PHOTOS
