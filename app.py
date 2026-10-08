@@ -837,62 +837,23 @@ def show_home():
 
     st.divider()
 
-    # =====================================================
-    # OTHER OPTIONS
-    # =====================================================
+     # =========================================================
+# GOGY & TITLI AI CONVERSATION
+# =========================================================
 
-    col1, col2 = st.columns(2)
+def ask_character_ai(character, user_message):
+    if gemini_client is None:
+        return "I'm sorry! My AI brain isn't connected right now. Please check the Gemini API key."
 
-    with col1:
-
-        st.subheader("🌿 Explore Flora & Fauna")
-
-        st.write(
-            "Search animals and plants and "
-            "explore biodiversity information."
-        )
-
-        if st.button(
-            "Explore Flora & Fauna",
-            use_container_width=True,
-            key="explore_home"
-        ):
-
-            st.session_state.page = "search"
-
-            st.session_state.search_name = ""
-
-            st.session_state.selected_taxon = None
-
-            st.session_state.selected_observations = []
-
-            st.rerun()
-
-    with col2:
-
-        st.subheader("📷 Identify from Photo")
-
-        st.write(
-            "Upload a photograph and let AI "
-            "identify the organism."
-        )
-
-        if st.button(
-            "Identify from Photo",
-            use_container_width=True,
-            key="identify_home"
-        ):
-
-            st.session_state.page = "identify"
-
-            st.rerun()
-
-    st.divider()
-
-    st.caption(
-        "🌿 Biodiversity data and photographs "
-        "are retrieved from iNaturalist."
-    ) 
+    if character == "titli":
+        personality = """
+You are Titli, a young female nature companion.
+Personality: sweet, curious, expressive, slightly mischievous, friendly, and scientifically accurate.
+Use occasional cute expressions such as Ooooh!, Hehe!, Wow!, Hmph!, or Wait wait!, but do not overuse them.
+Gently correct scientific mistakes. Do not blindly agree. Keep answers short, natural and easy to understand.
+"""
+    else:
+        personality = """
  You are Gogy, a young male nature companion.
 Personality: curious, friendly, playful, calm and slightly more mature than Titli.
 Use occasional expressions such as Hmm..., Oh!, Wait a second..., Whoa!, or Interesting!, but do not overuse them.
