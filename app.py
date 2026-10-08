@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import hashlib
 import json
+import time
 from io import BytesIO
 from PIL import Image
 from google import genai
@@ -241,6 +242,7 @@ except Exception:
 GEMINI_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
+    "gemini-3.6-flash",
 ]
 
 
@@ -381,11 +383,7 @@ def identify_organism_cached(
 # It runs only when the user presses "More Information".
 # =========================================================
 
-@st.cache_data(
-    ttl=86400,
-    show_spinner=False
-)
-def generate_species_information(
+ def generate_species_information(
     common_name,
     scientific_name,
     organism_type
@@ -394,8 +392,7 @@ def generate_species_information(
     if gemini_client is None:
 
         return {
-            "error":
-                "Gemini API is not available."
+            "error": "Gemini API is not available."
         }
 
     prompt = f"""
@@ -407,13 +404,15 @@ Organism type: {organism_type}
 
 Important:
 - This is an educational biodiversity encyclopedia.
+- Use scientifically reliable general knowledge.
 - Do not invent precise measurements when uncertain.
 - Clearly indicate when information is approximate.
 - Do not provide medical treatment or medicinal dosage.
 - Do not claim that a species cures a disease.
 - Do not invent scientific facts.
+- Keep each field concise but informative.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON in exactly this structure:
 
 {{
   "region": "...",
@@ -430,7 +429,10 @@ Return ONLY valid JSON:
 
 For an ANIMAL:
 - diet_or_growth = what it eats
-- include behaviour, anatomy and reproduction
+- anatomy = important body structure
+- behaviour = important natural behaviour
+- reproduction = reproductive behaviour/process
+- adaptations = adaptations to its environment
 
 For a PLANT:
 - diet_or_growth = how it grows and develops
@@ -439,40 +441,103 @@ For a PLANT:
 - reproduction = sexual/asexual reproduction
 - adaptations = environmental adaptations
 
-Keep each field concise but informative.
 Return JSON only.
 """
 
-    try:
+    # Try several Gemini models
+    models_to_try = [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash"
+    ]
 
-        response = gemini_client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt
-        )
+    errors = []
 
-        text = response.text.strip()
+    for model_name in models_to_try:
 
-        if text.startswith("```"):
+        # Try each model up to 2 times
+        for attempt in range(2):
 
-            text = text.replace(
-                "```json",
-                ""
-            )
+            try:
 
-            text = text.replace(
-                "```",
-                ""
-            )
+                response = gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
 
-            text = text.strip()
+                text = response.text.strip()
 
-        return json.loads(text)
+                # Remove Markdown code fences if Gemini adds them
+                if text.startswith("```"):
 
-    except Exception as e:
+                    text = text.replace(
+                        "```json",
+                        "",
+                        1
+                    )
 
-        return {
-            "error": str(e)
-        }
+                    text = text.replace(
+                        "```",
+                        ""
+                    )
+
+                    text = text.strip()
+
+                # Find JSON object if Gemini adds extra text
+                if not text.startswith("{"):
+
+                    start = text.find("{")
+                    end = text.rfind("}")
+
+                    if start != -1 and end != -1:
+
+                        text = text[start:end + 1]
+
+                result = json.loads(text)
+
+                # Make sure we actually received the expected fields
+                required_fields = [
+                    "region",
+                    "habitat",
+                    "diet_or_growth",
+                    "size",
+                    "lifespan",
+                    "anatomy",
+                    "behaviour",
+                    "reproduction",
+                    "adaptations",
+                    "ecology"
+                ]
+
+                for field in required_fields:
+
+                    if field not in result:
+
+                        result[field] = "Information unavailable."
+
+                # Save which model successfully answered
+                result["_model_used"] = model_name
+
+                return result
+
+            except Exception as e:
+
+                error_text = str(e)
+
+                errors.append(
+                    f"{model_name} attempt {attempt + 1}: {error_text}"
+                )
+
+                # Retry only after a short delay
+                if attempt == 0:
+
+                    time.sleep(2)
+
+    # All models failed
+    return {
+        "error": "Gemini could not generate the detailed information.",
+        "details": errors
+    }
 
 
 # =========================================================
