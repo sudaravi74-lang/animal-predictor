@@ -1288,11 +1288,14 @@ def show_conversation():
 
     if not st.session_state.character_conversation:
 
-          with st.chat_message("assistant"):
+          with 
+st.chat_message("assistant"):
 
-    with st.spinner(character_name + " is thinking..."):
+            with st.spinner
+                        (character_name + " is thinking..."):
 
-        answer = ask_character_ai(
+        answer = 
+ask_character_ai(
             character,
             user_message
         )
