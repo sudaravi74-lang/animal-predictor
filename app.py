@@ -757,13 +757,13 @@ if taxon_id:
         + str(taxon_id)
     )
 
-     st.markdown("### 🔬 More Information")
+      st.markdown("### 🔬 More Information")
 
-    st.link_button(
-        "🌿 Explore on iNaturalist",
-        inat_url,
-        use_container_width=True
-                 )
+     st.link_button(
+         "🌿 Explore on iNaturalist",
+         inat_url,
+         use_container_width=True
+                  )
          
 
     
