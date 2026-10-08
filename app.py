@@ -749,21 +749,21 @@ if observations:
     # iNATURALIST SOURCE
     # =====================================================
 
-    taxon_id = taxon.get("id")
+taxon_id = texon.get("id")
 
-    if taxon_id:
-        inat_url = (
-            "https://www.inaturalist.org/taxa/"
-            + str(taxon_id)
-        )
+if taxon_id:
+    inat_url = (
+        "https://www.inaturalist.org/taxa/"
+        + str(taxon_id)
+    )
 
-        st.markdown("### 🔬 More Information")
+     st.markdown("### 🔬 More Information")
 
-        st.link_button(
-            "🌿 Explore on iNaturalist",
-            inat_url,
-            use_container_width=True
-                    )
+    st.link_button(
+        "🌿 Explore on iNaturalist",
+        inat_url,
+        use_container_width=True
+                 )
          
 
     
