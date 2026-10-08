@@ -3,6 +3,7 @@ import requests
 import hashlib
 import json
 import time
+import re
 from io import BytesIO
 from PIL import Image
 from google import genai
@@ -26,7 +27,7 @@ st.set_page_config(
 defaults = {
     "page": "home",
 
-    # Identification
+    # Photo identification
     "image_bytes": None,
     "image_hash": None,
     "ai_result": None,
@@ -35,20 +36,19 @@ defaults = {
     # Species
     "selected_taxon": None,
     "selected_observations": [],
-    "species_info": None,
-    "species_info_loaded": False,
+    "selected_eol": None,
 
     # Search
     "search_name": "",
 
-    # Home images
-    "home_animal_image": None,
-    "home_plant_image": None,
+    # Home
+    "home_nature_image": None,
 }
 
 for key, value in defaults.items():
 
     if key not in st.session_state:
+
         st.session_state[key] = value
 
 
@@ -63,6 +63,10 @@ INAT_TAXA_URL = (
 INAT_OBSERVATIONS_URL = (
     "https://api.inaturalist.org/v1/observations"
 )
+
+HEADERS = {
+    "User-Agent": "Nature-Encyclopedia-AI/1.0"
+}
 
 
 # =========================================================
@@ -83,10 +87,7 @@ def search_taxon_cached(search_name):
                 "q": search_name,
                 "per_page": 10
             },
-            headers={
-                "User-Agent":
-                "Nature-Encyclopedia-AI/1.0"
-            },
+            headers=HEADERS,
             timeout=15
         )
 
@@ -98,6 +99,7 @@ def search_taxon_cached(search_name):
         )
 
         if not results:
+
             return None
 
         search_lower = (
@@ -106,7 +108,7 @@ def search_taxon_cached(search_name):
             .lower()
         )
 
-        # First try exact common/scientific match
+        # Exact match first
         for taxon in results:
 
             common_name = (
@@ -128,7 +130,7 @@ def search_taxon_cached(search_name):
 
                 return taxon
 
-        # Otherwise return best result
+        # Otherwise best result
         return results[0]
 
     except Exception as e:
@@ -160,10 +162,7 @@ def get_observations_cached(taxon_id):
                 "order": "desc",
                 "per_page": 6
             },
-            headers={
-                "User-Agent":
-                "Nature-Encyclopedia-AI/1.0"
-            },
+            headers=HEADERS,
             timeout=20
         )
 
@@ -180,17 +179,19 @@ def get_observations_cached(taxon_id):
 
 
 # =========================================================
-# iNATURALIST PHOTO
+# iNATURALIST PHOTO URL
 # =========================================================
 
 def get_large_photo_url(photo):
 
     if not photo:
+
         return None
 
     url = photo.get("url")
 
     if not url:
+
         return None
 
     url = url.replace(
@@ -209,6 +210,361 @@ def get_large_photo_url(photo):
     )
 
     return url
+
+
+# =========================================================
+# ENCYCLOPEDIA OF LIFE
+# =========================================================
+
+EOL_SEARCH_URL = (
+    "https://eol.org/api/search/1.0.json"
+)
+
+EOL_PAGES_URL = (
+    "https://eol.org/api/pages/1.0.json"
+)
+
+
+# =========================================================
+# CLEAN EOL TEXT
+# =========================================================
+
+def clean_eol_text(text):
+
+    if not text:
+
+        return ""
+
+    # Remove HTML tags
+    text = re.sub(
+        r"<[^>]+>",
+        " ",
+        str(text)
+    )
+
+    # Basic HTML entities
+    text = (
+        text
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
+    )
+
+    # Remove extra spaces
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    ).strip()
+
+    return text
+
+
+# =========================================================
+# EOL SEARCH
+# =========================================================
+
+@st.cache_data(
+    ttl=86400,
+    show_spinner=False
+)
+def search_eol_cached(search_name):
+
+    try:
+
+        response = requests.get(
+            EOL_SEARCH_URL,
+            params={
+                "q": search_name,
+                "page": 1,
+                "exact": "true"
+            },
+            headers=HEADERS,
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        results = data.get(
+            "results",
+            []
+        )
+
+        # If exact search failed,
+        # try broader search.
+        if not results:
+
+            response = requests.get(
+                EOL_SEARCH_URL,
+                params={
+                    "q": search_name,
+                    "page": 1
+                },
+                headers=HEADERS,
+                timeout=20
+            )
+
+            response.raise_for_status()
+
+            data = response.json()
+
+            results = data.get(
+                "results",
+                []
+            )
+
+        if not results:
+
+            return None
+
+        search_lower = (
+            search_name
+            .strip()
+            .lower()
+        )
+
+        # Exact title match
+        for result in results:
+
+            title = (
+                str(
+                    result.get("title")
+                    or ""
+                )
+                .lower()
+            )
+
+            if title == search_lower:
+
+                return result
+
+        return results[0]
+
+    except Exception as e:
+
+        return {
+            "error": str(e)
+        }
+
+
+# =========================================================
+# EOL PAGE
+# =========================================================
+
+@st.cache_data(
+    ttl=86400,
+    show_spinner=False
+)
+def get_eol_page_cached(eol_id):
+
+    try:
+
+        response = requests.get(
+            EOL_PAGES_URL,
+            params={
+                "id": eol_id,
+                "details": "true",
+                "images_per_page": 0,
+                "videos_per_page": 0,
+                "sounds_per_page": 0,
+                "maps_per_page": 0,
+                "texts_per_page": 20,
+                "common_names": "true",
+                "synonyms": "true",
+                "references": "true",
+                "taxonomy": "true",
+                "language": "en"
+            },
+            headers=HEADERS,
+            timeout=30
+        )
+
+        response.raise_for_status()
+
+        return response.json()
+
+    except Exception as e:
+
+        return {
+            "error": str(e)
+        }
+
+
+# =========================================================
+# ORGANIZE EOL INFORMATION
+# =========================================================
+
+def extract_eol_sections(page_data):
+
+    sections = {
+
+        "overview": [],
+
+        "physical": [],
+
+        "distribution": [],
+
+        "life": [],
+
+        "ecology": [],
+
+        "other": []
+    }
+
+    objects = page_data.get(
+        "dataObjects",
+        []
+    )
+
+    for obj in objects:
+
+        data_type = obj.get(
+            "dataType"
+        )
+
+        if data_type not in [
+            "http://purl.org/dc/dcmitype/Text",
+            "Text"
+        ]:
+
+            continue
+
+        description = clean_eol_text(
+            obj.get("description")
+        )
+
+        if len(description) < 40:
+
+            continue
+
+        title = clean_eol_text(
+            obj.get("title")
+        ).lower()
+
+        subjects = obj.get(
+            "subjects"
+        ) or []
+
+        subject_text = " ".join(
+            [
+                str(x)
+                for x in subjects
+            ]
+        ).lower()
+
+        combined = (
+            title
+            + " "
+            + subject_text
+        )
+
+        # Distribution / habitat
+        if any(
+            word in combined
+            for word in [
+                "distribution",
+                "geographic",
+                "range",
+                "habitat"
+            ]
+        ):
+
+            category = "distribution"
+
+        # Physical
+        elif any(
+            word in combined
+            for word in [
+                "physical",
+                "description",
+                "morphology",
+                "anatomy",
+                "appearance",
+                "identification"
+            ]
+        ):
+
+            category = "physical"
+
+        # Life / behaviour
+        elif any(
+            word in combined
+            for word in [
+                "behavior",
+                "behaviour",
+                "life history",
+                "reproduction",
+                "feeding",
+                "diet"
+            ]
+        ):
+
+            category = "life"
+
+        # Ecology
+        elif any(
+            word in combined
+            for word in [
+                "ecology",
+                "ecosystem",
+                "ecological",
+                "interaction"
+            ]
+        ):
+
+            category = "ecology"
+
+        # First unmatched text = overview
+        elif not sections["overview"]:
+
+            category = "overview"
+
+        else:
+
+            category = "other"
+
+        entry = {
+
+            "title": clean_eol_text(
+                obj.get("title")
+            ),
+
+            "text": description,
+
+            "source": obj.get(
+                "source"
+            ) or "",
+
+            "license": obj.get(
+                "license"
+            ) or ""
+        }
+
+        sections[
+            category
+        ].append(entry)
+
+    # Keep page readable
+    for key in sections:
+
+        sections[key] = sections[key][:4]
+
+    return sections
+
+
+# =========================================================
+# EOL SOURCE URL
+# =========================================================
+
+def get_eol_source_url(eol_id):
+
+    return (
+        "https://eol.org/pages/"
+        + str(eol_id)
+    )
 
 
 # =========================================================
@@ -233,21 +589,19 @@ except Exception:
 # =========================================================
 # GEMINI MODELS
 # =========================================================
-#
-# We use the current stable Flash models.
-# If 3.8 is temporarily unavailable,
-# the app can try 3.7.
-# =========================================================
 
 GEMINI_MODELS = [
+
     "gemini-3.8-flash",
+
     "gemini-3.7-flash",
-    "gemini-3.6-flash",
+
+    "gemini-3.6-flash"
 ]
 
 
 # =========================================================
-# IDENTIFY ANIMAL OR PLANT
+# GEMINI PHOTO IDENTIFICATION
 # =========================================================
 
 def identify_with_model(
@@ -260,18 +614,20 @@ def identify_with_model(
     )
 
     prompt = """
+
 Look carefully at this image.
 
 Identify the main living organism.
 
 It may be:
+
 - an animal
 - a plant
 - another clearly identifiable living organism
 
-For this application, focus on animals and plants.
+For this application, focus mainly on animals and plants.
 
-Return ONLY valid JSON in exactly this format:
+Return ONLY valid JSON:
 
 {
   "type": "animal or plant",
@@ -284,29 +640,39 @@ Return ONLY valid JSON in exactly this format:
 Rules:
 
 1. Do not invent a species.
+
 2. If species-level identification is uncertain,
-   identify the broader organism.
+identify the broader organism.
+
 3. Confidence must be between 0 and 100.
+
 4. Keep the reason short.
+
 5. Return JSON only.
+
 """
 
-    response = gemini_client.models.generate_content(
-        model=model_name,
-        contents=[
-            prompt,
-            image
-        ]
+    response = (
+        gemini_client
+        .models
+        .generate_content(
+            model=model_name,
+            contents=[
+                prompt,
+                image
+            ]
+        )
     )
 
     text = response.text.strip()
 
-    # Remove accidental markdown JSON fences
+    # Remove Markdown code fences
     if text.startswith("```"):
 
         text = text.replace(
             "```json",
-            ""
+            "",
+            1
         )
 
         text = text.replace(
@@ -316,11 +682,28 @@ Rules:
 
         text = text.strip()
 
+    # Find JSON if Gemini
+    # accidentally adds text
+    if not text.startswith("{"):
+
+        start = text.find("{")
+
+        end = text.rfind("}")
+
+        if (
+            start != -1
+            and end != -1
+        ):
+
+            text = text[
+                start:end + 1
+            ]
+
     return json.loads(text)
 
 
 # =========================================================
-# GEMINI IDENTIFICATION CACHE
+# IDENTIFICATION CACHE
 # =========================================================
 
 @st.cache_data(
@@ -335,9 +718,12 @@ def identify_organism_cached(
     if gemini_client is None:
 
         return {
+
             "success": False,
+
             "error":
                 "GEMINI_API_KEY is missing or invalid.",
+
             "model": None
         }
 
@@ -345,199 +731,93 @@ def identify_organism_cached(
 
     for model_name in GEMINI_MODELS:
 
-        try:
+        for attempt in range(2):
 
-            result = identify_with_model(
-                image_bytes,
-                model_name
-            )
+            try:
 
-            return {
-                "success": True,
-                "result": result,
-                "model": model_name,
-                "error": None
-            }
+                result = (
+                    identify_with_model(
+                        image_bytes,
+                        model_name
+                    )
+                )
 
-        except Exception as e:
+                return {
 
-            errors.append(
-                f"{model_name}: {str(e)}"
-            )
+                    "success": True,
 
-            # Try the next model
-            continue
+                    "result": result,
+
+                    "model": model_name,
+
+                    "error": None
+                }
+
+            except Exception as e:
+
+                errors.append(
+                    f"{model_name} "
+                    f"attempt {attempt + 1}: "
+                    f"{str(e)}"
+                )
+
+                if attempt == 0:
+
+                    time.sleep(2)
 
     return {
+
         "success": False,
-        "error": "\n\n".join(errors),
+
+        "error": "\n\n".join(
+            errors
+        ),
+
         "model": None
     }
 
 
 # =========================================================
-# GEMINI DETAILED SPECIES INFORMATION
-# =========================================================
-#
-# This is NOT automatically generated when opening a species.
-# It runs only when the user presses "More Information".
+# ORGANISM TYPE
 # =========================================================
 
-def generate_species_information(
-    common_name,
-    scientific_name,
-    organism_type
+def determine_organism_type(
+    taxon,
+    ai_result=None
 ):
 
-    if gemini_client is None:
+    if ai_result:
 
-        return {
-            "error": "Gemini API is not available."
-        }
+        ai_type = str(
+            ai_result.get(
+                "type",
+                ""
+            )
+        ).lower()
 
-    prompt = f"""
-Create an educational encyclopedia entry for:
+        if ai_type in [
+            "animal",
+            "plant"
+        ]:
 
-Common name: {common_name}
-Scientific name: {scientific_name}
-Organism type: {organism_type}
+            return ai_type
 
-Important:
-- This is an educational biodiversity encyclopedia.
-- Use scientifically reliable general knowledge.
-- Do not invent precise measurements when uncertain.
-- Clearly indicate when information is approximate.
-- Do not provide medical treatment or medicinal dosage.
-- Do not claim that a species cures a disease.
-- Do not invent scientific facts.
-- Keep each field concise but informative.
+    major_group = str(
+        taxon.get(
+            "iconic_taxon_name",
+            ""
+        )
+    ).lower()
 
-Return ONLY valid JSON in exactly this structure:
+    if major_group == "plantae":
 
-{{
-  "region": "...",
-  "habitat": "...",
-  "diet_or_growth": "...",
-  "size": "...",
-  "lifespan": "...",
-  "anatomy": "...",
-  "behaviour": "...",
-  "reproduction": "...",
-  "adaptations": "...",
-  "ecology": "..."
-}}
+        return "plant"
 
-For an ANIMAL:
-- diet_or_growth = what it eats
-- anatomy = important body structure
-- behaviour = important natural behaviour
-- reproduction = reproductive behaviour/process
-- adaptations = adaptations to its environment
+    if major_group == "animalia":
 
-For a PLANT:
-- diet_or_growth = how it grows and develops
-- anatomy = roots, stem, leaves, flowers, fruit/seeds where applicable
-- behaviour = plant responses where scientifically meaningful
-- reproduction = sexual/asexual reproduction
-- adaptations = environmental adaptations
+        return "animal"
 
-Return JSON only.
-"""
-
-    # Try several Gemini models
-    models_to_try = [
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-        "gemini-3.6-flash"
-    ]
-
-    errors = []
-
-    for model_name in models_to_try:
-
-        # Try each model up to 2 times
-        for attempt in range(2):
-
-            try:
-
-                response = gemini_client.models.generate_content(
-                    model=model_name,
-                    contents=prompt
-                )
-
-                text = response.text.strip()
-
-                # Remove Markdown code fences if Gemini adds them
-                if text.startswith("```"):
-
-                    text = text.replace(
-                        "```json",
-                        "",
-                        1
-                    )
-
-                    text = text.replace(
-                        "```",
-                        ""
-                    )
-
-                    text = text.strip()
-
-                # Find JSON object if Gemini adds extra text
-                if not text.startswith("{"):
-
-                    start = text.find("{")
-                    end = text.rfind("}")
-
-                    if start != -1 and end != -1:
-
-                        text = text[start:end + 1]
-
-                result = json.loads(text)
-
-                # Make sure we actually received the expected fields
-                required_fields = [
-                    "region",
-                    "habitat",
-                    "diet_or_growth",
-                    "size",
-                    "lifespan",
-                    "anatomy",
-                    "behaviour",
-                    "reproduction",
-                    "adaptations",
-                    "ecology"
-                ]
-
-                for field in required_fields:
-
-                    if field not in result:
-
-                        result[field] = "Information unavailable."
-
-                # Save which model successfully answered
-                result["_model_used"] = model_name
-
-                return result
-
-            except Exception as e:
-
-                error_text = str(e)
-
-                errors.append(
-                    f"{model_name} attempt {attempt + 1}: {error_text}"
-                )
-
-                # Retry only after a short delay
-                if attempt == 0:
-
-                    time.sleep(2)
-
-    # All models failed
-    return {
-        "error": "Gemini could not generate the detailed information.",
-        "details": errors
-    }
+    return "organism"
 
 
 # =========================================================
@@ -553,7 +833,8 @@ def show_species_page(
     if not taxon:
 
         st.warning(
-            "Species information could not be found."
+            "Species information "
+            "could not be found."
         )
 
         return
@@ -562,56 +843,53 @@ def show_species_page(
 
         st.error(
             "iNaturalist error: "
-            + str(taxon["error"])
+            + str(
+                taxon["error"]
+            )
         )
 
         return
 
     common_name = (
+
         taxon.get(
             "preferred_common_name"
         )
+
         or taxon.get("name")
+
         or "Unknown"
     )
 
     scientific_name = (
+
         taxon.get("name")
+
         or "Unknown"
     )
 
     rank = (
+
         taxon.get("rank")
+
         or "Unknown"
     )
 
     major_group = (
+
         taxon.get(
             "iconic_taxon_name"
         )
+
         or "Unknown"
     )
 
-    # Determine animal/plant
-    if ai_result:
-
-        organism_type = (
-            ai_result.get(
-                "type",
-                ""
-            ).lower()
+    organism_type = (
+        determine_organism_type(
+            taxon,
+            ai_result
         )
-
-    else:
-
-        if major_group.lower() == "plantae":
-            organism_type = "plant"
-
-        elif major_group.lower() == "animalia":
-            organism_type = "animal"
-
-        else:
-            organism_type = "organism"
+    )
 
     # -----------------------------------------------------
     # HEADER
@@ -623,10 +901,16 @@ def show_species_page(
             f"🌱 {common_name}"
         )
 
-    else:
+    elif organism_type == "animal":
 
         st.title(
             f"🐾 {common_name}"
+        )
+
+    else:
+
+        st.title(
+            f"🌍 {common_name}"
         )
 
     st.markdown(
@@ -651,14 +935,16 @@ def show_species_page(
         )
 
         st.write(
-            f"**Taxonomic rank:** {rank}"
-        )
-
-        st.write(
-            f"**Major group:** {major_group}"
+            f"**Taxonomic rank:** "
+            f"{rank}"
         )
 
     with col2:
+
+        st.write(
+            f"**Major group:** "
+            f"{major_group}"
+        )
 
         if organism_type == "plant":
 
@@ -682,14 +968,18 @@ def show_species_page(
     # MAIN PHOTO
     # -----------------------------------------------------
 
-    default_photo = taxon.get(
-        "default_photo"
+    default_photo = (
+        taxon.get(
+            "default_photo"
+        )
     )
 
     if default_photo:
 
-        photo_url = get_large_photo_url(
-            default_photo
+        photo_url = (
+            get_large_photo_url(
+                default_photo
+            )
         )
 
         if photo_url:
@@ -704,19 +994,15 @@ def show_species_page(
             )
 
     # -----------------------------------------------------
-    # BASIC AI INFORMATION
+    # AI DETAILS
     # -----------------------------------------------------
 
     if ai_result:
 
-        reason = ai_result.get(
-            "reason",
-            ""
-        )
-
-        confidence = ai_result.get(
-            "confidence",
-            None
+        confidence = (
+            ai_result.get(
+                "confidence"
+            )
         )
 
         if confidence is not None:
@@ -726,6 +1012,13 @@ def show_species_page(
                 f"{confidence}%"
             )
 
+        reason = (
+            ai_result.get(
+                "reason",
+                ""
+            )
+        )
+
         if reason:
 
             st.write(
@@ -734,7 +1027,7 @@ def show_species_page(
             )
 
     # -----------------------------------------------------
-    # MORE INFORMATION BUTTON
+    # EOL
     # -----------------------------------------------------
 
     st.divider()
@@ -744,200 +1037,263 @@ def show_species_page(
     )
 
     st.write(
-        "Open this section if you want a deeper "
-        "educational explanation."
+        "This information is retrieved from "
+        "the Encyclopedia of Life instead of "
+        "being generated as facts by AI."
+    )
+
+    eol_result = (
+        st.session_state.selected_eol
     )
 
     if st.button(
-        "🔬 Show More Information",
+        "🔬 Load Encyclopedia Information",
         type="primary",
         use_container_width=True,
-        key="more_info_button"
+        key="load_eol_button"
     ):
 
         with st.spinner(
-            "Preparing detailed information..."
+            "Finding encyclopedia information..."
         ):
 
-            information = (
-                generate_species_information(
-                    common_name,
-                    scientific_name,
-                    organism_type
+            # First use scientific name
+            eol_search = (
+                search_eol_cached(
+                    scientific_name
                 )
             )
 
-        st.session_state.species_info = (
-            information
-        )
+            # If not found,
+            # try common name
+            if (
+                not eol_search
+                or eol_search.get("error")
+            ):
 
-        st.session_state.species_info_loaded = (
-            True
-        )
+                eol_search = (
+                    search_eol_cached(
+                        scientific_name
+                )
+            )
 
-        st.rerun()
+            # If not found,
+            # try common name
+            if (
+                not eol_search
+                or eol_search.get("error")
+            ):
+
+                eol_search = (
+                    search_eol_cached(
+                        common_name
+                    )
+                )
+
+            if (
+                eol_search
+                and not eol_search.get(
+                    "error"
+                )
+            ):
+
+                eol_id = (
+                    eol_search.get(
+                        "id"
+                    )
+                )
+
+                if eol_id:
+
+                    eol_page = (
+                        get_eol_page_cached(
+                            eol_id
+                        )
+                    )
+
+                    st.session_state.selected_eol = {
+
+                        "search": eol_search,
+
+                        "page": eol_page
+                    }
+
+                    st.rerun()
+
+                else:
+
+                    st.error(
+                        "EOL found a result "
+                        "but no page ID."
+                    )
+
+            elif (
+                eol_search
+                and eol_search.get(
+                    "error"
+                )
+            ):
+
+                st.error(
+                    "Encyclopedia of Life "
+                    "could not be reached right now."
+                )
+
+                with st.expander(
+                    "Technical details"
+                ):
+
+                    st.code(
+                        str(
+                            eol_search[
+                                "error"
+                            ]
+                        )
+                    )
+
+            else:
+
+                st.warning(
+                    "No Encyclopedia of Life "
+                    "page was found for this organism."
+                )
 
     # -----------------------------------------------------
-    # DETAILED INFORMATION
+    # SHOW EOL INFORMATION
     # -----------------------------------------------------
 
-    if st.session_state.species_info_loaded:
+    if eol_result:
 
-        information = (
-            st.session_state.species_info
+        eol_page = (
+            eol_result.get(
+                "page",
+                {}
+            )
         )
 
-        if information.get("error"):
+        if eol_page.get(
+            "error"
+        ):
 
             st.error(
-                "Detailed information could not "
-                "be generated right now."
+                "EOL page could not be loaded."
             )
 
         else:
 
-            st.info(
-                "The following detailed educational "
-                "text is AI-generated and should be "
-                "treated as an educational summary."
+            sections = (
+                extract_eol_sections(
+                    eol_page
+                )
             )
 
-            # REGION
-            with st.expander(
-                "🌍 Region & Distribution",
-                expanded=True
-            ):
+            st.success(
+                "Information source: "
+                "Encyclopedia of Life"
+            )
 
-                st.write(
-                    information.get(
-                        "region",
-                        "Information unavailable."
-                    )
+            eol_id = (
+                eol_result
+                .get("search", {})
+                .get("id")
+            )
+
+            if eol_id:
+
+                st.markdown(
+                    "🔗 [Open the full "
+                    "Encyclopedia of Life page]"
+                    f"({get_eol_source_url(eol_id)})"
                 )
 
-            # HABITAT
-            with st.expander(
-                "🌳 Habitat",
-                expanded=True
-            ):
+            section_titles = [
 
-                st.write(
-                    information.get(
-                        "habitat",
-                        "Information unavailable."
-                    )
+                (
+                    "overview",
+                    "📖 Overview"
+                ),
+
+                (
+                    "physical",
+                    "🧬 Physical Description"
+                ),
+
+                (
+                    "distribution",
+                    "🌍 Distribution & Habitat"
+                ),
+
+                (
+                    "life",
+                    "🧠 Behaviour, Life History & Reproduction"
+                ),
+
+                (
+                    "ecology",
+                    "🌿 Ecology"
+                ),
+
+                (
+                    "other",
+                    "📚 Other Information"
+                )
+            ]
+
+            displayed_any = False
+
+            for (
+                section_key,
+                title
+            ) in section_titles:
+
+                entries = sections.get(
+                    section_key,
+                    []
                 )
 
-            # DIET / GROWTH
-            if organism_type == "plant":
+                if not entries:
 
-                title = "🌱 Growth & Development"
+                    continue
 
-            else:
+                displayed_any = True
 
-                title = "🍖 Diet & Feeding"
-
-            with st.expander(
-                title,
-                expanded=True
-            ):
-
-                st.write(
-                    information.get(
-                        "diet_or_growth",
-                        "Information unavailable."
+                with st.expander(
+                    title,
+                    expanded=(
+                        section_key
+                        == "overview"
                     )
-                )
+                ):
 
-            # SIZE
-            with st.expander(
-                "📏 Size",
-                expanded=False
-            ):
+                    for entry in entries:
 
-                st.write(
-                    information.get(
-                        "size",
-                        "Information unavailable."
-                    )
-                )
+                        if entry["title"]:
 
-            # LIFESPAN
-            with st.expander(
-                "❤️ Lifespan",
-                expanded=False
-            ):
+                            st.markdown(
+                                f"**{entry['title']}**"
+                            )
 
-                st.write(
-                    information.get(
-                        "lifespan",
-                        "Information unavailable."
-                    )
-                )
+                        st.write(
+                            entry["text"]
+                        )
 
-            # ANATOMY
-            with st.expander(
-                "🧬 Anatomy",
-                expanded=False
-            ):
+                        if entry["source"]:
 
-                st.write(
-                    information.get(
-                        "anatomy",
-                        "Information unavailable."
-                    )
-                )
+                            st.caption(
+                                "Source: "
+                                + str(
+                                    entry["source"]
+                                )
+                            )
 
-            # BEHAVIOUR
-            with st.expander(
-                "🧠 Behaviour",
-                expanded=False
-            ):
+                        st.divider()
 
-                st.write(
-                    information.get(
-                        "behaviour",
-                        "Information unavailable."
-                    )
-                )
+            if not displayed_any:
 
-            # REPRODUCTION
-            with st.expander(
-                "❤️ Reproduction",
-                expanded=False
-            ):
-
-                st.write(
-                    information.get(
-                        "reproduction",
-                        "Information unavailable."
-                    )
-                )
-
-            # ADAPTATIONS
-            with st.expander(
-                "🌍 Adaptations",
-                expanded=False
-            ):
-
-                st.write(
-                    information.get(
-                        "adaptations",
-                        "Information unavailable."
-                    )
-                )
-
-            # ECOLOGY
-            with st.expander(
-                "🌿 Ecological Role",
-                expanded=False
-            ):
-
-                st.write(
-                    information.get(
-                        "ecology",
-                        "Information unavailable."
-                    )
+                st.warning(
+                    "The EOL page exists, "
+                    "but it did not return "
+                    "readable text information."
                 )
 
     # -----------------------------------------------------
@@ -956,9 +1312,11 @@ def show_species_page(
 
         for observation in observations:
 
-            photos = observation.get(
-                "photos",
-                []
+            photos = (
+                observation.get(
+                    "photos",
+                    []
+                )
             )
 
             if photos:
@@ -986,7 +1344,9 @@ def show_species_page(
     # iNATURALIST SOURCE
     # -----------------------------------------------------
 
-    taxon_id = taxon.get("id")
+    taxon_id = (
+        taxon.get("id")
+    )
 
     if taxon_id:
 
@@ -1016,109 +1376,92 @@ def show_home():
     )
 
     st.write(
-        "Identify animals and plants from photographs "
-        "or search for species directly."
+        "Search for animals, plants and "
+        "other living organisms, or identify "
+        "one from a photograph."
     )
 
     st.divider()
 
     # -----------------------------------------------------
-    # Get example animal image
+    # Example image
     # -----------------------------------------------------
 
     if (
-        st.session_state.home_animal_image
+        st.session_state.home_nature_image
         is None
     ):
 
-        animal_taxon = (
+        example_taxon = (
             search_taxon_cached(
                 "tiger"
             )
         )
 
         if (
-            animal_taxon
-            and not animal_taxon.get("error")
+            example_taxon
+            and not example_taxon.get(
+                "error"
+            )
         ):
 
-            st.session_state.home_animal_image = (
+            st.session_state.home_nature_image = (
                 get_large_photo_url(
-                    animal_taxon.get(
+                    example_taxon.get(
                         "default_photo"
                     )
                 )
             )
 
     # -----------------------------------------------------
-    # Get example plant image
+    # TWO OPTIONS
     # -----------------------------------------------------
 
-    if (
-        st.session_state.home_plant_image
-        is None
-    ):
-
-        plant_taxon = (
-            search_taxon_cached(
-                "sunflower"
-            )
-        )
-
-        if (
-            plant_taxon
-            and not plant_taxon.get("error")
-        ):
-
-            st.session_state.home_plant_image = (
-                get_large_photo_url(
-                    plant_taxon.get(
-                        "default_photo"
-                    )
-                )
-            )
-
-    # -----------------------------------------------------
-    # THREE MAIN OPTIONS
-    # -----------------------------------------------------
-
-    col1, col2, col3 = st.columns(
-        3,
+    col1, col2 = st.columns(
+        2,
         gap="large"
     )
-
     # =====================================================
-    # ANIMALS
+    # FLORA & FAUNA
     # =====================================================
 
     with col1:
 
-        with st.container(border=True):
+        with st.container(
+            border=True
+        ):
 
-            if st.session_state.home_animal_image:
+            if (
+                st.session_state
+                .home_nature_image
+            ):
 
                 st.image(
-                    st.session_state.home_animal_image,
+                    st.session_state
+                    .home_nature_image,
                     use_container_width=True
                 )
 
             else:
 
-                st.write("🐾")
+                st.markdown(
+                    "## 🌿"
+                )
 
             st.subheader(
-                "🐾 Animals"
+                "🌿 Explore Flora & Fauna"
             )
 
             st.write(
-                "Explore animals, habitats, "
-                "behaviour, anatomy and more."
+                "Search animals, plants and "
+                "other living organisms in one place."
             )
 
             if st.button(
-                "Explore Animals",
+                "Explore Flora & Fauna",
+                type="primary",
                 use_container_width=True,
-                key="animals_button"
+                key="explore_nature_button"
             ):
 
                 st.session_state.page = (
@@ -1127,47 +1470,17 @@ def show_home():
 
                 st.session_state.search_name = ""
 
-                st.rerun()
-
-    # =====================================================
-    # PLANTS
-    # =====================================================
-
-    with col2:
-
-        with st.container(border=True):
-
-            if st.session_state.home_plant_image:
-
-                st.image(
-                    st.session_state.home_plant_image,
-                    use_container_width=True
+                st.session_state.selected_taxon = (
+                    None
                 )
 
-            else:
-
-                st.write("🌱")
-
-            st.subheader(
-                "🌱 Plants"
-            )
-
-            st.write(
-                "Explore plants, growth, structure, "
-                "reproduction and ecology."
-            )
-
-            if st.button(
-                "Explore Plants",
-                use_container_width=True,
-                key="plants_button"
-            ):
-
-                st.session_state.page = (
-                    "search"
+                st.session_state.selected_observations = (
+                    []
                 )
 
-                st.session_state.search_name = ""
+                st.session_state.selected_eol = (
+                    None
+                )
 
                 st.rerun()
 
@@ -1175,9 +1488,11 @@ def show_home():
     # PHOTO IDENTIFICATION
     # =====================================================
 
-    with col3:
+    with col2:
 
-        with st.container(border=True):
+        with st.container(
+            border=True
+        ):
 
             st.markdown(
                 "## 📷"
@@ -1208,8 +1523,10 @@ def show_home():
     st.divider()
 
     st.info(
-        "🌿 Biodiversity data and photographs "
-        "are retrieved from iNaturalist."
+        "🌿 Species and photographs are "
+        "discovered through iNaturalist. "
+        "Encyclopedia information is retrieved "
+        "from the Encyclopedia of Life."
     )
 
 
@@ -1219,38 +1536,54 @@ def show_home():
 
 def show_search():
 
-    if st.button("← Home"):
+    if st.button(
+        "← Home"
+    ):
 
-        st.session_state.page = "home"
+        st.session_state.page = (
+            "home"
+        )
 
         st.rerun()
 
     st.title(
-        "🔎 Explore Nature"
+        "🌿 Explore Flora & Fauna"
     )
 
     st.write(
-        "Search for an animal or plant by name."
+        "Search for an animal, plant or "
+        "other living organism by common "
+        "or scientific name."
     )
 
-    search_name = st.text_input(
-        "Search",
-        value=st.session_state.search_name,
-        placeholder=(
-            "Example: Tiger, Rabbit, Mango, Neem..."
-        )
-    )
-
-    if st.button(
-        "🔎 Search",
-        type="primary",
-        use_container_width=True
+    with st.form(
+        "nature_search_form"
     ):
+
+        search_name = st.text_input(
+            "Search organism",
+            value=(
+                st.session_state.search_name
+            ),
+            placeholder=(
+                "Example: Tiger, Rabbit, "
+                "Mango, Neem..."
+            )
+        )
+
+        submitted = (
+            st.form_submit_button(
+                "🔎 Search",
+                use_container_width=True
+            )
+        )
+
+    if submitted:
 
         if not search_name.strip():
 
             st.warning(
-                "Please enter a name."
+                "Please enter an organism name."
             )
 
             return
@@ -1260,7 +1593,7 @@ def show_search():
         )
 
         with st.spinner(
-            "Finding this species..."
+            "Finding this organism..."
         ):
 
             taxon = (
@@ -1269,12 +1602,15 @@ def show_search():
                 )
             )
 
-            if taxon and not taxon.get(
-                "error"
+            if (
+                taxon
+                and not taxon.get(
+                    "error"
+                )
             ):
 
-                taxon_id = taxon.get(
-                    "id"
+                taxon_id = (
+                    taxon.get("id")
                 )
 
                 observations = []
@@ -1287,13 +1623,6 @@ def show_search():
                         )
                     )
 
-                # Reset detailed information
-                st.session_state.species_info = None
-
-                st.session_state.species_info_loaded = (
-                    False
-                )
-
                 st.session_state.selected_taxon = (
                     taxon
                 )
@@ -1302,41 +1631,58 @@ def show_search():
                     observations
                 )
 
+                st.session_state.selected_eol = (
+                    None
+                )
+
                 st.rerun()
 
-            elif taxon and taxon.get(
-                "error"
+            elif (
+                taxon
+                and taxon.get("error")
             ):
 
                 st.error(
                     "iNaturalist error: "
-                    + str(taxon["error"])
+                    + str(
+                        taxon["error"]
+                    )
                 )
 
             else:
 
                 st.warning(
-                    "No matching species was found."
+                    "No matching organism was found. "
+                    "Try another common or scientific name."
                 )
 
-    # Show selected species
-    if st.session_state.selected_taxon:
+    # Show species
+    if (
+        st.session_state.selected_taxon
+    ):
 
         show_species_page(
+
             st.session_state.selected_taxon,
-            st.session_state.selected_observations
+
+            st.session_state
+            .selected_observations
         )
 
 
 # =========================================================
-# IDENTIFICATION PAGE
+# PHOTO IDENTIFICATION PAGE
 # =========================================================
 
 def show_identify():
 
-    if st.button("← Home"):
+    if st.button(
+        "← Home"
+    ):
 
-        st.session_state.page = "home"
+        st.session_state.page = (
+            "home"
+        )
 
         st.rerun()
 
@@ -1345,8 +1691,8 @@ def show_identify():
     )
 
     st.write(
-        "Upload a photograph and AI will try "
-        "to identify the living organism."
+        "Upload a photograph and AI will "
+        "try to identify the living organism."
     )
 
     uploaded_file = st.file_uploader(
@@ -1383,15 +1729,27 @@ def show_identify():
                 image_hash
             )
 
-            st.session_state.ai_result = None
-            st.session_state.ai_model_used = None
+            st.session_state.ai_result = (
+                None
+            )
 
-            st.session_state.selected_taxon = None
-            st.session_state.selected_observations = []
+            st.session_state.ai_model_used = (
+                None
+            )
 
-            st.session_state.species_info = None
-            st.session_state.species_info_loaded = False
-                # -----------------------------------------------------
+            st.session_state.selected_taxon = (
+                None
+            )
+
+            st.session_state.selected_observations = (
+                []
+            )
+
+            st.session_state.selected_eol = (
+                None
+            )
+
+    # -----------------------------------------------------
     # DISPLAY IMAGE
     # -----------------------------------------------------
 
@@ -1413,7 +1771,10 @@ def show_identify():
         # IDENTIFY
         # -------------------------------------------------
 
-        if st.session_state.ai_result is None:
+        if (
+            st.session_state.ai_result
+            is None
+        ):
 
             if st.button(
                 "🔍 Identify",
@@ -1427,8 +1788,12 @@ def show_identify():
 
                     result = (
                         identify_organism_cached(
-                            st.session_state.image_bytes,
-                            st.session_state.image_hash
+
+                            st.session_state
+                            .image_bytes,
+
+                            st.session_state
+                            .image_hash
                         )
                     )
 
@@ -1447,8 +1812,8 @@ def show_identify():
                 else:
 
                     st.error(
-                        "The AI service is temporarily "
-                        "unavailable."
+                        "The AI service is "
+                        "temporarily unavailable."
                     )
 
                     st.info(
@@ -1465,7 +1830,7 @@ def show_identify():
                         )
 
         # -------------------------------------------------
-        # SHOW AI RESULT
+        # AI RESULT
         # -------------------------------------------------
 
         if st.session_state.ai_result:
@@ -1474,41 +1839,56 @@ def show_identify():
                 st.session_state.ai_result
             )
 
-            organism_type = result.get(
-                "type",
-                "organism"
+            organism_type = (
+                result.get(
+                    "type",
+                    "organism"
+                )
             )
 
-            common_name = result.get(
-                "common_name",
-                "Unknown"
+            common_name = (
+                result.get(
+                    "common_name",
+                    "Unknown"
+                )
             )
 
-            scientific_name = result.get(
-                "scientific_name",
-                ""
+            scientific_name = (
+                result.get(
+                    "scientific_name",
+                    ""
+                )
             )
 
-            confidence = result.get(
-                "confidence",
-                0
+            confidence = (
+                result.get(
+                    "confidence",
+                    0
+                )
             )
 
-            reason = result.get(
-                "reason",
-                ""
+            reason = (
+                result.get(
+                    "reason",
+                    ""
+                )
             )
 
-            if organism_type.lower() == "plant":
+            if (
+                organism_type.lower()
+                == "plant"
+            ):
 
                 st.success(
-                    f"🌱 Identified: **{common_name}**"
+                    f"🌱 Identified: "
+                    f"**{common_name}**"
                 )
 
             else:
 
                 st.success(
-                    f"🐾 Identified: **{common_name}**"
+                    f"🐾 Identified: "
+                    f"**{common_name}**"
                 )
 
             st.metric(
@@ -1533,14 +1913,19 @@ def show_identify():
 
                 st.caption(
                     "AI model: "
-                    + st.session_state.ai_model_used
+                    + st.session_state
+                    .ai_model_used
                 )
 
             # -------------------------------------------------
-            # FIND iNATURALIST SPECIES
+            # FIND iNATURALIST
             # -------------------------------------------------
 
-            if st.session_state.selected_taxon is None:
+            if (
+                st.session_state
+                .selected_taxon
+                is None
+            ):
 
                 if st.button(
                     "🌍 Find Species Information",
@@ -1552,8 +1937,6 @@ def show_identify():
                         "Finding biodiversity information..."
                     ):
 
-                        # Prefer scientific name
-                        # when available
                         if scientific_name:
 
                             taxon = (
@@ -1577,8 +1960,10 @@ def show_identify():
                             )
                         ):
 
-                            taxon_id = taxon.get(
-                                "id"
+                            taxon_id = (
+                                taxon.get(
+                                    "id"
+                                )
                             )
 
                             observations = []
@@ -1599,10 +1984,8 @@ def show_identify():
                                 observations
                             )
 
-                            st.session_state.species_info = None
-
-                            st.session_state.species_info_loaded = (
-                                False
+                            st.session_state.selected_eol = (
+                                None
                             )
 
                             st.rerun()
@@ -1619,11 +2002,19 @@ def show_identify():
             # SPECIES PAGE
             # -------------------------------------------------
 
-            if st.session_state.selected_taxon:
+            if (
+                st.session_state
+                .selected_taxon
+            ):
 
                 show_species_page(
-                    st.session_state.selected_taxon,
-                    st.session_state.selected_observations,
+
+                    st.session_state
+                    .selected_taxon,
+
+                    st.session_state
+                    .selected_observations,
+
                     ai_result=result
                 )
 
@@ -1638,14 +2029,24 @@ def show_identify():
 # APP ROUTER
 # =========================================================
 
-if st.session_state.page == "home":
+if (
+    st.session_state.page
+    == "home"
+):
 
     show_home()
 
-elif st.session_state.page == "search":
+elif (
+    st.session_state.page
+    == "search"
+):
 
     show_search()
 
-elif st.session_state.page == "identify":
+elif (
+    st.session_state.page
+    == "identify"
+):
 
     show_identify()
+                      
