@@ -840,8 +840,8 @@ def show_search():
             ):
 
                 st.error(
-                    "iNaturalist error
-                    str(taxon["error"])
+    "iNaturalist error: "
+    + str(taxon["error"])
                 )
 
             else:
