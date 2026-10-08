@@ -748,9 +748,8 @@ if observations:
     # =====================================================
     # iNATURALIST SOURCE
     # =====================================================
-    taxon_id = (
-        taxon.get("id")
-    )
+
+    taxon_id = taxon.get("id")
 
     if taxon_id:
         inat_url = (
@@ -764,7 +763,7 @@ if observations:
             "🌿 Explore on iNaturalist",
             inat_url,
             use_container_width=True
-        )
+                    )
          
 
     
