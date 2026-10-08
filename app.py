@@ -1,4 +1,4 @@
- import streamlit as st
+import streamlit as st
 from sklearn.ensemble import RandomForestClassifier
 
 st.title("🐾 Animal Encyclopedia & Predictor")
