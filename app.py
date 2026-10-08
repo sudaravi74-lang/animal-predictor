@@ -6,7 +6,7 @@ from transformers import CLIPProcessor, CLIPModel
 
 
 # =========================================================
-# PAGE
+# PAGE SETTINGS
 # =========================================================
 
 st.set_page_config(
@@ -16,7 +16,10 @@ st.set_page_config(
 )
 
 st.title("🐾 Animal Encyclopedia & Predictor")
-st.write("Explore animals, identify animals using measurements, or identify an animal from an image.")
+st.write(
+    "Explore animals, identify animals using measurements, "
+    "or identify an animal from an image."
+)
 
 
 # =========================================================
@@ -28,8 +31,8 @@ animals = {
     "Dog": {
         "emoji": "🐶",
         "appearance": "Dogs have four legs, a tail, two ears and a muzzle.",
-        "colour": "Many colours including black, white, brown, golden and mixed colours.",
-        "body": "Medium-sized mammal with a muscular body.",
+        "colour": "Black, white, brown, golden and many combinations.",
+        "body": "Small to large muscular body depending on breed.",
         "region": "Worldwide",
         "habitat": "Homes, farms, villages and cities.",
         "diet": "Omnivore",
@@ -41,7 +44,7 @@ animals = {
 
     "Cat": {
         "emoji": "🐱",
-        "appearance": "Cats have a small flexible body, four legs, pointed ears, whiskers and a long tail.",
+        "appearance": "Cats have a small flexible body, four legs, pointed ears, whiskers and a tail.",
         "colour": "White, black, grey, orange, brown and many combinations.",
         "body": "Small, flexible and muscular body.",
         "region": "Worldwide",
@@ -64,7 +67,7 @@ animals = {
         "size": "Large",
         "weight": "120–250 kg",
         "lifespan": "10–15 years in the wild",
-        "fact": "Lions are the only big cats that commonly live in social groups called prides."
+        "fact": "Lions commonly live in social groups called prides."
     },
 
     "Tiger": {
@@ -113,7 +116,7 @@ animals = {
         "emoji": "🦒",
         "appearance": "Very tall animal with an extremely long neck and long legs.",
         "colour": "Yellowish or orange with brown patches.",
-        "body": "Tall body with long neck and legs.",
+        "body": "Tall body with a long neck and long legs.",
         "region": "Africa",
         "habitat": "Savannas, grasslands and open woodlands.",
         "diet": "Herbivore",
@@ -140,7 +143,7 @@ animals = {
     "Monkey": {
         "emoji": "🐒",
         "appearance": "Primates with hands, feet, expressive faces and usually a tail.",
-        "colour": "Brown, grey, black, golden and other colours depending on species.",
+        "colour": "Brown, grey, black, golden and other colours.",
         "body": "Agile body with flexible limbs.",
         "region": "Africa, Asia and the Americas depending on species.",
         "habitat": "Forests, grasslands and mountains.",
@@ -168,19 +171,28 @@ animals = {
 
 
 # =========================================================
-# RANDOM FOREST MEASUREMENT MODEL
+# MEASUREMENT MODEL
 # =========================================================
 
 features = [
     [40,70,10,4], [50,80,20,4], [60,100,30,4],
+
     [20,40,3,4], [25,45,4,4], [30,50,6,4],
+
     [100,180,150,4], [120,200,190,4], [130,220,220,4],
+
     [90,180,120,4], [100,200,180,4], [110,220,230,4],
+
     [250,400,3000,4], [300,500,5000,4], [350,600,6000,4],
+
     [140,220,400,4], [160,250,500,4], [170,270,600,4],
+
     [400,280,800,4], [500,300,1000,4], [550,350,1200,4],
+
     [60,120,70,4], [70,150,100,4], [80,170,120,4],
+
     [40,60,8,4], [60,80,15,4], [80,100,25,4],
+
     [120,200,250,4], [130,230,350,4], [150,250,400,4]
 ]
 
@@ -197,22 +209,22 @@ labels = [
     "Zebra","Zebra","Zebra"
 ]
 
-model = RandomForestClassifier(
+measurement_model = RandomForestClassifier(
     n_estimators=100,
     random_state=42
 )
 
-model.fit(features, labels)
+measurement_model.fit(features, labels)
 
 
 # =========================================================
-# CLIP IMAGE MODEL
+# CLIP MODEL
 # =========================================================
 
 @st.cache_resource
 def load_clip_model():
 
-    model = CLIPModel.from_pretrained(
+    clip_model = CLIPModel.from_pretrained(
         "openai/clip-vit-base-patch32"
     )
 
@@ -220,7 +232,9 @@ def load_clip_model():
         "openai/clip-vit-base-patch32"
     )
 
-    return model, processor
+    clip_model.eval()
+
+    return clip_model, processor
 
 
 # =========================================================
@@ -291,7 +305,7 @@ option = st.radio(
 
 
 # =========================================================
-# 1. EXPLORE ANIMAL
+# EXPLORE ANIMAL
 # =========================================================
 
 if option == "📚 Explore Animal":
@@ -307,7 +321,7 @@ if option == "📚 Explore Animal":
 
 
 # =========================================================
-# 2. IDENTIFY UNKNOWN ANIMAL
+# MEASUREMENT IDENTIFICATION
 # =========================================================
 
 elif option == "🤖 Identify Unknown Animal":
@@ -341,7 +355,7 @@ elif option == "🤖 Identify Unknown Animal":
 
     if st.button("🔍 Identify Animal"):
 
-        prediction = model.predict(
+        prediction = measurement_model.predict(
             [[height, length, weight, legs]]
         )[0]
 
@@ -353,21 +367,23 @@ elif option == "🤖 Identify Unknown Animal":
 
 
 # =========================================================
-# 3. IDENTIFY ANIMAL FROM IMAGE
+# IMAGE IDENTIFICATION
 # =========================================================
 
 elif option == "📷 Identify Animal from Image":
 
-    st.subheader("📷 Upload an Animal Image")
+    st.subheader("📷 Identify Animal from Image")
 
     uploaded_image = st.file_uploader(
-        "Choose an image:",
+        "Upload an animal photo",
         type=["jpg", "jpeg", "png"]
     )
 
     if uploaded_image is not None:
 
-        image = Image.open(uploaded_image).convert("RGB")
+        image = Image.open(
+            uploaded_image
+        ).convert("RGB")
 
         st.image(
             image,
@@ -377,21 +393,28 @@ elif option == "📷 Identify Animal from Image":
 
         if st.button("🔍 Identify Animal"):
 
-            with st.spinner("AI is analyzing the image..."):
+            with st.spinner(
+                "AI is analyzing the image..."
+            ):
 
                 clip_model, processor = load_clip_model()
 
-                animal_names = list(animals.keys())
+                animal_names = list(
+                    animals.keys()
+                )
 
-                # Multiple descriptions make classification
-                # more reliable than using only animal names.
-                text_prompts = [
-                    f"a clear photo of a {animal.lower()}"
-                    for animal in animal_names
-                ]
+                # Multiple descriptions help CLIP
+                # understand the visual concept.
+                prompts = []
+
+                for animal in animal_names:
+
+                    prompts.append(
+                        f"a photo of a {animal.lower()}"
+                    )
 
                 inputs = processor(
-                    text=text_prompts,
+                    text=prompts,
                     images=image,
                     return_tensors="pt",
                     padding=True
@@ -399,26 +422,33 @@ elif option == "📷 Identify Animal from Image":
 
                 with torch.no_grad():
 
-                    outputs = clip_model(**inputs)
+                    outputs = clip_model(
+                        **inputs
+                    )
 
-                    logits_per_image = outputs.logits_per_image
+                    probabilities = (
+                        outputs.logits_per_image
+                        .softmax(dim=1)[0]
+                    )
 
-                    probabilities = logits_per_image.softmax(
-                        dim=1
-                    )[0]
+                top_values, top_indices = torch.topk(
+                    probabilities,
+                    k=3
+                )
 
-                best_index = torch.argmax(
-                    probabilities
-                ).item()
+                best_index = top_indices[0].item()
 
                 predicted_animal = animal_names[
                     best_index
                 ]
 
                 confidence = (
-                    probabilities[best_index].item()
-                    * 100
+                    top_values[0].item() * 100
                 )
+
+            # =================================================
+            # RESULT
+            # =================================================
 
             st.success(
                 f"🐾 Predicted Animal: **{predicted_animal}**"
@@ -432,12 +462,12 @@ elif option == "📷 Identify Animal from Image":
                 predicted_animal
             )
 
-            # Show top 3 predictions
-            st.subheader("🔎 Other Possible Results")
+            # =================================================
+            # TOP 3 RESULTS
+            # =================================================
 
-            top_values, top_indices = torch.topk(
-                probabilities,
-                k=3
+            st.subheader(
+                "🔎 Top 3 AI Predictions"
             )
 
             for value, index in zip(
@@ -449,10 +479,12 @@ elif option == "📷 Identify Animal from Image":
                     index.item()
                 ]
 
-                percentage = value.item() * 100
+                percentage = (
+                    value.item() * 100
+                )
 
                 st.write(
                     f"{animals[animal]['emoji']} "
                     f"**{animal}** — "
                     f"{percentage:.2f}%"
-    )
+)
