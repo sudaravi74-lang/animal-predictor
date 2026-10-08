@@ -1288,10 +1288,14 @@ def show_conversation():
 
     if not st.session_state.character_conversation:
 
-         with st.chat_message("assistant"):
+          with st.chat_message("assistant"):
 
     with st.spinner(character_name + " is thinking..."):
-        answer = ask_character_ai(character, user_message)
+
+        answer = ask_character_ai(
+            character,
+            user_message
+        )
 
     st.write(answer)
 
@@ -1302,7 +1306,12 @@ def show_conversation():
     )
 
     if audio:
-        prepare_audio(audio, character)
+
+        prepare_audio(
+            audio,
+            character
+        )
+
         play_character_audio()
     # =====================================================
     # PREVIOUS CONVERSATION
