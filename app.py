@@ -25,18 +25,14 @@ st.set_page_config(
 
 defaults = {
     "page": "home",
-
     "image_bytes": None,
     "image_hash": None,
     "ai_result": None,
     "ai_model_used": None,
-
     "selected_taxon": None,
     "selected_observations": [],
-
     "search_name": "",
-
-    "home_nature_image": None,
+    "home_nature_image": None
 }
 
 for key, value in defaults.items():
@@ -62,7 +58,7 @@ HEADERS = {
 
 
 # =========================================================
-# SEARCH iNATURALIST TAXON
+# iNATURALIST TAXON SEARCH
 # =========================================================
 
 @st.cache_data(
@@ -96,7 +92,7 @@ def search_taxon_cached(search_name):
             search_name.strip().lower()
         )
 
-        # Exact common/scientific name first
+        # Exact common/scientific name
         for taxon in results:
 
             common_name = (
@@ -117,6 +113,7 @@ def search_taxon_cached(search_name):
             ):
                 return taxon
 
+        # Otherwise use first result
         return results[0]
 
     except Exception as e:
@@ -127,7 +124,7 @@ def search_taxon_cached(search_name):
 
 
 # =========================================================
-# GET iNATURALIST OBSERVATIONS
+# iNATURALIST OBSERVATIONS
 # =========================================================
 
 @st.cache_data(
@@ -165,7 +162,7 @@ def get_observations_cached(taxon_id):
 
 
 # =========================================================
-# GET LARGE PHOTO URL
+# LARGE PHOTO URL
 # =========================================================
 
 def get_large_photo_url(photo):
@@ -220,11 +217,8 @@ except Exception:
 # =========================================================
 
 GEMINI_MODELS = [
-
     "gemini-3.8-flash",
-
     "gemini-3.7-flash",
-
     "gemini-3.6-flash"
 ]
 
@@ -243,18 +237,16 @@ def identify_with_model(
     )
 
     prompt = """
-
 Look carefully at this image.
 
 Identify the main living organism.
 
 It may be:
-
 - an animal
 - a plant
 - another clearly identifiable living organism
 
-For this application, focus mainly on animals and plants.
+Focus mainly on animals and plants.
 
 Return ONLY valid JSON in exactly this format:
 
@@ -269,16 +261,11 @@ Return ONLY valid JSON in exactly this format:
 Rules:
 
 1. Do not invent a species.
-
 2. If species-level identification is uncertain,
-identify the broader organism.
-
+   identify the broader organism.
 3. Confidence must be between 0 and 100.
-
 4. Keep the reason short.
-
 5. Return JSON only.
-
 """
 
     response = (
@@ -311,20 +298,121 @@ identify the broader organism.
 
         text = text.strip()
 
-    # Find JSON if extra text appears
+    # Find JSON inside response
     if not text.startswith("{"):
 
         start = text.find("{")
         end = text.rfind("}")
-                text = text[
-            start:end + 1
-        ]
 
-                                   
+        if start != -1 and end != -1:
+            text = text[start:end + 1]
 
-return json.loads(text)
-            
-        # =========================================================
+    return json.loads(text)
+
+
+# =========================================================
+# GEMINI IDENTIFICATION
+# =========================================================
+
+@st.cache_data(
+    ttl=3600,
+    show_spinner=False
+)
+def identify_organism_cached(
+    image_bytes,
+    image_hash
+):
+
+    if gemini_client is None:
+
+        return {
+            "success": False,
+            "error": (
+                "GEMINI_API_KEY is missing "
+                "or invalid."
+            ),
+            "model": None
+        }
+
+    errors = []
+
+    for model_name in GEMINI_MODELS:
+
+        for attempt in range(2):
+
+            try:
+
+                result = identify_with_model(
+                    image_bytes,
+                    model_name
+                )
+
+                return {
+                    "success": True,
+                    "result": result,
+                    "model": model_name,
+                    "error": None
+                }
+
+            except Exception as e:
+
+                errors.append(
+                    f"{model_name} "
+                    f"attempt {attempt + 1}: "
+                    f"{str(e)}"
+                )
+
+                if attempt == 0:
+                    time.sleep(2)
+
+    return {
+        "success": False,
+        "error": "\n\n".join(errors),
+        "model": None
+    }
+
+
+# =========================================================
+# ORGANISM TYPE
+# =========================================================
+
+def determine_organism_type(
+    taxon,
+    ai_result=None
+):
+
+    if ai_result:
+
+        ai_type = str(
+            ai_result.get(
+                "type",
+                ""
+            )
+        ).lower()
+
+        if ai_type in [
+            "animal",
+            "plant"
+        ]:
+
+            return ai_type
+
+    major_group = str(
+        taxon.get(
+            "iconic_taxon_name",
+            ""
+        )
+    ).lower()
+
+    if major_group == "plantae":
+        return "plant"
+
+    if major_group == "animalia":
+        return "animal"
+
+    return "organism"
+
+# =========================================================
 # SPECIES PAGE
 # =========================================================
 
@@ -352,7 +440,9 @@ def show_species_page(
         return
 
     common_name = (
-        taxon.get("preferred_common_name")
+        taxon.get(
+            "preferred_common_name"
+        )
         or taxon.get("name")
         or "Unknown"
     )
@@ -384,23 +474,23 @@ def show_species_page(
     if organism_type == "plant":
 
         st.title(
-            f"🌱 {common_name}"
+            "🌱 " + common_name
         )
 
     elif organism_type == "animal":
 
         st.title(
-            f"🐾 {common_name}"
+            "🐾 " + common_name
         )
 
     else:
 
         st.title(
-            f"🌍 {common_name}"
+            "🌍 " + common_name
         )
 
     st.markdown(
-        f"### *{scientific_name}*"
+        "### *" + scientific_name + "*"
     )
 
     # =====================================================
@@ -416,20 +506,21 @@ def show_species_page(
     with col1:
 
         st.write(
-            f"**Scientific name:** "
-            f"*{scientific_name}*"
+            "**Scientific name:** *"
+            + scientific_name
+            + "*"
         )
 
         st.write(
-            f"**Taxonomic rank:** "
-            f"{rank}"
+            "**Taxonomic rank:** "
+            + rank
         )
 
     with col2:
 
         st.write(
-            f"**Major group:** "
-            f"{major_group}"
+            "**Major group:** "
+            + major_group
         )
 
         if organism_type == "plant":
@@ -454,8 +545,8 @@ def show_species_page(
     # MAIN PHOTO
     # =====================================================
 
-    default_photo = (
-        taxon.get("default_photo")
+    default_photo = taxon.get(
+        "default_photo"
     )
 
     if default_photo:
@@ -476,7 +567,7 @@ def show_species_page(
             )
 
     # =====================================================
-    # AI IDENTIFICATION DETAILS
+    # AI DETAILS
     # =====================================================
 
     if ai_result:
@@ -488,8 +579,9 @@ def show_species_page(
         if confidence is not None:
 
             st.write(
-                f"**Identification confidence:** "
-                f"{confidence}%"
+                "**Identification confidence:** "
+                + str(confidence)
+                + "%"
             )
 
         reason = ai_result.get(
@@ -500,8 +592,8 @@ def show_species_page(
         if reason:
 
             st.write(
-                f"**Identification reason:** "
-                f"{reason}"
+                "**Identification reason:** "
+                + str(reason)
             )
 
     # =====================================================
@@ -528,12 +620,6 @@ def show_species_page(
             inat_url,
             use_container_width=True
         )
-
-    st.caption(
-        "Explore iNaturalist for additional "
-        "species information, observations "
-        "and photographs."
-    )
 
     # =====================================================
     # MORE PHOTOS
@@ -565,7 +651,6 @@ def show_species_page(
                 )
 
                 if photo_url:
-
                     photo_urls.append(
                         photo_url
                     )
@@ -579,7 +664,7 @@ def show_species_page(
 
 
 # =========================================================
-# HOME
+# HOME PAGE
 # =========================================================
 
 def show_home():
@@ -600,7 +685,7 @@ def show_home():
     st.divider()
 
     # =====================================================
-    # HOME EXAMPLE IMAGE
+    # HOME IMAGE
     # =====================================================
 
     if (
@@ -644,9 +729,7 @@ def show_home():
             border=True
         ):
 
-            if (
-                st.session_state.home_nature_image
-            ):
+            if st.session_state.home_nature_image:
 
                 st.image(
                     st.session_state.home_nature_image,
@@ -675,19 +758,13 @@ def show_home():
                 key="explore_nature_button"
             ):
 
-                st.session_state.page = (
-                    "search"
-                )
+                st.session_state.page = "search"
 
                 st.session_state.search_name = ""
 
-                st.session_state.selected_taxon = (
-                    None
-                )
+                st.session_state.selected_taxon = None
 
-                st.session_state.selected_observations = (
-                    []
-                )
+                st.session_state.selected_observations = []
 
                 st.rerun()
 
@@ -721,9 +798,7 @@ def show_home():
                 key="photo_button"
             ):
 
-                st.session_state.page = (
-                    "identify"
-                )
+                st.session_state.page = "identify"
 
                 st.rerun()
 
@@ -732,10 +807,8 @@ def show_home():
     st.info(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
-    )
-
-
-# =========================================================
+        )
+    # =========================================================
 # SEARCH PAGE
 # =========================================================
 
@@ -766,9 +839,7 @@ def show_search():
 
         search_name = st.text_input(
             "Search organism",
-            value=(
-                st.session_state.search_name
-            ),
+            value=st.session_state.search_name,
             placeholder=(
                 "Example: Tiger, Rabbit, "
                 "Mango, Neem..."
@@ -839,8 +910,8 @@ def show_search():
             ):
 
                 st.error(
-    "iNaturalist error: "
-    + str(taxon["error"])
+                    "iNaturalist error: "
+                    + str(taxon["error"])
                 )
 
             else:
@@ -859,12 +930,6 @@ def show_search():
             st.session_state.selected_taxon,
             st.session_state.selected_observations
         )
-        
-        #part 3
-        # =========================================================
-# PART 3
-# PHOTO IDENTIFICATION + APP ROUTER
-# =========================================================
 
 
 # =========================================================
@@ -954,13 +1019,10 @@ def show_identify():
         )
 
         # =================================================
-        # IDENTIFY BUTTON
+        # IDENTIFY
         # =================================================
 
-        if (
-            st.session_state.ai_result
-            is None
-        ):
+        if st.session_state.ai_result is None:
 
             if st.button(
                 "🔍 Identify",
@@ -1057,33 +1119,37 @@ def show_identify():
             ):
 
                 st.success(
-                    f"🌱 Identified: "
-                    f"**{common_name}**"
+                    "🌱 Identified: **"
+                    + common_name
+                    + "**"
                 )
 
             else:
 
                 st.success(
-                    f"🐾 Identified: "
-                    f"**{common_name}**"
+                    "🐾 Identified: **"
+                    + common_name
+                    + "**"
                 )
 
             st.metric(
                 "AI Confidence",
-                f"{confidence}%"
+                str(confidence) + "%"
             )
 
             if scientific_name:
 
                 st.write(
-                    f"**Scientific name:** "
-                    f"*{scientific_name}*"
+                    "**Scientific name:** *"
+                    + scientific_name
+                    + "*"
                 )
 
             if reason:
 
                 st.write(
-                    f"**Why:** {reason}"
+                    "**Why:** "
+                    + reason
                 )
 
             if st.session_state.ai_model_used:
@@ -1169,9 +1235,7 @@ def show_identify():
             # SPECIES PAGE
             # =============================================
 
-            if (
-                st.session_state.selected_taxon
-            ):
+            if st.session_state.selected_taxon:
 
                 show_species_page(
                     st.session_state.selected_taxon,
@@ -1190,25 +1254,14 @@ def show_identify():
 # APP ROUTER
 # =========================================================
 
-if (
-    st.session_state.page
-    == "home"
-):
+if st.session_state.page == "home":
 
     show_home()
 
-elif (
-    st.session_state.page
-    == "search"
-):
+elif st.session_state.page == "search":
 
     show_search()
 
-elif (
-    st.session_state.page
-    == "identify"
-):
+elif st.session_state.page == "identify":
 
     show_identify()
-            
-            
