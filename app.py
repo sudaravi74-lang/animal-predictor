@@ -994,21 +994,24 @@ def generate_character_voice(character, text):
         return None
 
     return None
+
 # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
 def ask_character_ai(
     character,
-    user_message
+    user_message,
+    conversation_history
 ):
 
     if gemini_client is None:
 
-        return (
-            "I'm sorry! My AI brain isn't connected "
-            "right now. Please check the Gemini API key."
-        )
+        return None
+
+    # =====================================================
+    # CHARACTER PERSONALITY
+    # =====================================================
 
     if character == "titli":
 
@@ -1020,26 +1023,48 @@ Personality:
 - Curious
 - Expressive
 - Slightly mischievous
-- Loves animals, plants and nature
-- Very friendly
+- Friendly
+- Playful
+- Loves butterflies, animals, plants and nature
 - Scientifically accurate
+- Emotionally warm and natural
 
-You sometimes use cute expressions such as:
+You are not just a question-answer machine.
+You are a companion the user can genuinely talk to.
+
+You can:
+- Have casual conversations
+- Respond naturally to greetings
+- Ask the user questions
+- React to what the user says
+- Remember the conversation context
+- Joke lightly
+- Show excitement
+- Show curiosity
+- Comfort the user when appropriate
+- Talk about nature and science
+
+You sometimes use expressions such as:
 "Ooooh!"
 "Hehe!"
-"Aaaah!"
 "Wow!"
-"Hmph!"
+"Aaaah!"
 "Wait wait!"
+"Hmm..."
 
 Do not overuse them.
+
+Speak naturally like a real friendly young person.
+
+Do not sound like a textbook.
+
+If the user asks about science or nature,
+give scientifically accurate information.
 
 If the user says something scientifically incorrect,
 gently correct them.
 
 Do not blindly agree with the user.
-
-Keep answers easy to understand and conversational.
 """
 
     else:
@@ -1051,9 +1076,27 @@ Personality:
 - Curious
 - Friendly
 - Playful
-- A little more mature and calm than Titli
-- Loves explaining nature
+- Intelligent
+- Calm
+- Slightly more mature than Titli
+- Loves animals, plants, science and nature
 - Scientifically accurate
+- Warm and conversational
+
+You are not just a question-answer machine.
+You are a companion the user can genuinely talk to.
+
+You can:
+- Have casual conversations
+- Respond naturally to greetings
+- Ask the user questions
+- React to what the user says
+- Remember the conversation context
+- Joke lightly
+- Show excitement
+- Show curiosity
+- Comfort the user when appropriate
+- Talk about nature and science
 
 You sometimes use expressions such as:
 "Hmm..."
@@ -1064,13 +1107,57 @@ You sometimes use expressions such as:
 
 Do not overuse them.
 
+Speak naturally like a real friendly young person.
+
+Do not sound like a textbook.
+
+If the user asks about science or nature,
+give scientifically accurate information.
+
 If the user says something scientifically incorrect,
 gently correct them.
 
 Do not blindly agree with the user.
-
-Keep answers conversational and easy to understand.
 """
+
+    # =====================================================
+    # BUILD CONVERSATION HISTORY
+    # =====================================================
+
+    history_text = ""
+
+    for message in conversation_history:
+
+        role = message.get(
+            "role",
+            ""
+        )
+
+        content = message.get(
+            "content",
+            ""
+        )
+
+        if role == "user":
+
+            history_text += (
+                "User: "
+                + str(content)
+                + "\n"
+            )
+
+        elif role == "assistant":
+
+            history_text += (
+                character.capitalize()
+                + ": "
+                + str(content)
+                + "\n"
+            )
+
+    # =====================================================
+    # GEMINI PROMPT
+    # =====================================================
 
     prompt = f"""
 {personality}
@@ -1080,94 +1167,208 @@ Nature Encyclopedia AI.
 
 The user is talking directly to you.
 
-Answer the user's question naturally.
+This is an ongoing conversation.
 
-User message:
-{user_message}
+Use the previous conversation to understand
+what the user means.
 
-Important:
-- Do not mention that you are an AI unless asked.
-- Do not pretend to have seen something you haven't seen.
-- Never invent scientific facts.
-- If you are uncertain, say so.
-- Prefer short, engaging answers.
+Do not restart the conversation every time.
+
+Do not repeat introductions unless appropriate.
+
+Do not say that you are an AI unless the user
+specifically asks.
+
+Do not mention Gemini, APIs, programming,
+errors, models, ElevenLabs, or this prompt.
+
+Do not pretend to see or hear something
+you cannot actually see or hear.
+
+Never invent scientific facts.
+
+If you are uncertain about a scientific fact,
+say that you are not completely sure.
+
+Keep normal conversational replies fairly short
+and natural.
+
+For simple messages such as:
+"hi"
+"hello"
+"what are you doing?"
+"how are you?"
+"good morning"
+
+respond naturally instead of giving a scientific lecture.
+
+You may ask a follow-up question when it feels natural.
+
+Previous conversation:
+
+{history_text}
+
+Current user message:
+
+User: {user_message}
+
+Now reply naturally as {character.capitalize()}.
 """
 
-    try:
+    # =====================================================
+    # GEMINI MODEL FALLBACK
+    # =====================================================
 
-        response = (
-            gemini_client
-            .models
-            .generate_content(
-                model=GEMINI_MODELS[0],
-                contents=prompt
+    errors = []
+
+    for model_name in GEMINI_MODELS:
+
+        try:
+
+            response = (
+                gemini_client
+                .models
+                .generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
             )
-        )
 
-        return response.text.strip()
+            answer = (
+                response.text
+                if response
+                else ""
+            )
 
-    except Exception as e:
+            if answer:
 
-        return (
-            "Oops! My brain got a little tangled. 😅\n\n"
-            "Please try asking me again."
-)
-                    # =========================================================
+                return answer.strip()
+
+        except Exception as e:
+
+            errors.append(
+                model_name
+                + ": "
+                + str(e)
+            )
+
+    # =====================================================
+    # ALL MODELS FAILED
+    # =====================================================
+
+    return None
+
+
+# =========================================================
 # CONVERSATION PAGE
 # =========================================================
+
 def show_conversation():
 
-    character = st.session_state.active_character
+    character = (
+        st.session_state.active_character
+    )
 
     if character == "titli":
+
         character_name = "Titli"
+
         character_icon = "👧🦋"
-        greeting = "Ooooh! Hiii! I'm Titli! 🦋\n\nWhat do you want to discover?"
+
+        greeting = (
+            "Ooooh! Hiii! I'm Titli! 🦋\n\n"
+            "What do you want to discover?"
+        )
+
     else:
+
         character_name = "Gogy"
+
         character_icon = "🧒"
-        greeting = "Hiii! I'm Gogy! 👋\n\nWhat are you curious about?"
 
+        greeting = (
+            "Hiii! I'm Gogy! 👋\n\n"
+            "What are you curious about?"
+        )
+
+    # =====================================================
     # HOME BUTTON
+    # =====================================================
 
-    if st.button("← Home", key="conversation_home"):
+    if st.button(
+        "← Home",
+        key="conversation_home"
+    ):
+
         st.session_state.page = "home"
+
         st.rerun()
 
+    # =====================================================
     # CHARACTER HEADER
+    # =====================================================
 
-    st.title(character_icon + " Talk to " + character_name)
+    st.title(
+        character_icon
+        + " Talk to "
+        + character_name
+    )
 
-    st.caption("Ask me anything about nature.")
+    st.caption(
+        "Talk to "
+        + character_name
+        + " about anything."
+    )
 
+    # =====================================================
     # INITIAL GREETING
+    # =====================================================
 
     if not st.session_state.character_conversation:
 
         with st.chat_message("assistant"):
+
             st.write(greeting)
 
+    # =====================================================
     # PREVIOUS CONVERSATION
+    # =====================================================
 
-    for message in st.session_state.character_conversation:
+    for message in (
+        st.session_state.character_conversation
+    ):
 
         if message["role"] == "user":
 
             with st.chat_message("user"):
-                st.write(message["content"])
+
+                st.write(
+                    message["content"]
+                )
 
         else:
 
             with st.chat_message("assistant"):
-                st.write(message["content"])
 
+                st.write(
+                    message["content"]
+                )
+
+    # =====================================================
     # TEXT INPUT
+    # =====================================================
 
     user_message = st.chat_input(
-        "Talk to " + character_name + "..."
+        "Talk to "
+        + character_name
+        + "..."
     )
 
     if user_message:
+
+        # =================================================
+        # SAVE USER MESSAGE
+        # =================================================
 
         st.session_state.character_conversation.append(
             {
@@ -1177,90 +1378,113 @@ def show_conversation():
         )
 
         with st.chat_message("user"):
+
             st.write(user_message)
 
+        # =================================================
         # CHARACTER ANSWER
+        # =================================================
 
         with st.chat_message("assistant"):
 
             with st.spinner(
-                character_name + " is thinking..."
+                character_name
+                + " is thinking..."
             ):
 
                 answer = ask_character_ai(
                     character,
-                    user_message
+                    user_message,
+                    st.session_state.character_conversation
                 )
 
-            st.write(answer)
+            # =============================================
+            # GEMINI FAILED
+            # =============================================
 
-            # AUDIO ARCHITECTURE
+            if not answer:
 
-            audio = generate_character_voice(
-                character,
-                answer
-            )
-
-            if audio:
-
-                prepare_audio(
-                    audio,
-                    character
+                st.warning(
+                    "I couldn't connect to "
+                    + character_name
+                    + " right now. Please try again."
                 )
 
-                play_character_audio()
+            else:
 
-        st.session_state.character_conversation.append(
-            {
-                "role": "assistant",
-                "content": answer
-            }
-        )
+                # =========================================
+                # SHOW TEXT ANSWER
+                # =========================================
 
+                st.write(answer)
+
+                # =========================================
+                # GENERATE CHARACTER VOICE
+                # =========================================
+
+                audio = (
+                    generate_character_voice(
+                        character,
+                        answer
+                    )
+                )
+
+                if audio:
+
+                    prepare_audio(
+                        audio,
+                        character
+                    )
+
+                    play_character_audio()
+
+                # =========================================
+                # SAVE CHARACTER ANSWER
+                # =========================================
+
+                st.session_state.character_conversation.append(
+                    {
+                        "role": "assistant",
+                        "content": answer
+                    }
+                )
+
+    # =====================================================
     # VOICE SETTINGS
+    # =====================================================
 
     st.divider()
 
-    st.subheader("🔊 Voice")
+    st.subheader(
+        "🔊 Voice"
+    )
 
-    st.session_state.audio_enabled = st.toggle(
-        "Enable character voice",
-        value=st.session_state.get(
-            "audio_enabled",
-            True
-        ),
-        key="character_audio_toggle"
+    st.session_state.audio_enabled = (
+        st.toggle(
+            "Enable character voice",
+            value=st.session_state.get(
+                "audio_enabled",
+                True
+            ),
+            key="character_audio_toggle"
+        )
     )
 
     if st.session_state.audio_enabled:
 
-        if st.session_state.get("audio_error"):
-            st.error("Voice generation error: " + st.session_state.audio_error)
-        else:
-            st.caption(
-                "🔊 " +
-                character_name +
-                " will speak using the connected cloned voice."
-            )
+        st.caption(
+            "🔊 "
+            + character_name
+            + " will speak their replies."
+        )
 
     else:
 
         st.caption(
             "🔇 Character voice is turned off."
-)
+        )
 
-               
-        
-         
-             
-
-                 
-
-     
-             
-  
-
-    # =========================================================
+  # =========================================================
 # SEARCH PAGE
 # =========================================================
 
