@@ -674,25 +674,30 @@ def show_species_page(
             )
 
 
-    # =====================================================
-    # MORE INFORMATION
-    # =====================================================
+     # =====================================================
+# MORE INFORMATION
+# =====================================================
 
-    st.divider()
+st.divider()
 
-    st.subheader(
-        "🔬 More Information"
-    )
+st.subheader("🔬 More Information")
 
-    st.write(
-        "Detailed information sections will "
-        "appear here."
-    )
+st.write(
+    "Want to learn more about this species?"
+)
 
-    st.info(
-        "More encyclopedia sections are being "
-        "prepared for this species."
-    )
+inat_url = f"https://www.inaturalist.org/taxa/{taxon_id}"
+
+st.link_button(
+    "🌿 Explore More on iNaturalist",
+    inat_url,
+    use_container_width=True
+)
+
+st.caption(
+    "iNaturalist provides additional information, "
+    "observations, photographs and species details."
+)
 
 
     # =====================================================
