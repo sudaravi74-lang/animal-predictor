@@ -704,7 +704,7 @@ st.caption(
     # MORE PHOTOS
     # =====================================================
 
-    if observations:
+if observations:
 
         st.divider()
 
