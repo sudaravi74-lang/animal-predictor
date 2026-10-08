@@ -316,15 +316,14 @@ identify the broader organism.
 
         start = text.find("{")
         end = text.rfind("}")
+                text = text[
+            start:end + 1
+        ]
 
-        if (
-            start != -1
-            and end != -1
-        ):
-    
+                                   
 
-           #part 2
-
+return json.loads(text)
+            
         # =========================================================
 # SPECIES PAGE
 # =========================================================
