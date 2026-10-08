@@ -748,20 +748,24 @@ if observations:
     # =====================================================
     # iNATURALIST SOURCE
     # =====================================================
+    taxon_id = (
         taxon.get("id")
     )
-  if taxon_id:
 
-
+    if taxon_id:
         inat_url = (
             "https://www.inaturalist.org/taxa/"
             + str(taxon_id)
         )
 
-        st.markdown(
-            f"🔗 [View this taxon on iNaturalist]"
-            f"({inat_url})"
+        st.markdown("### 🔬 More Information")
+
+        st.link_button(
+            "🌿 Explore on iNaturalist",
+            inat_url,
+            use_container_width=True
         )
+         
 
     
 
