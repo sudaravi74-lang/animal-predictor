@@ -1,8 +1,7 @@
 import streamlit as st
-from sklearn.ensemble import RandomForestClassifier
+import requests
 from PIL import Image
-import torch
-from transformers import CLIPProcessor, CLIPModel
+from google import genai
 
 
 # =========================================================
@@ -10,380 +9,443 @@ from transformers import CLIPProcessor, CLIPModel
 # =========================================================
 
 st.set_page_config(
-    page_title="Animal Encyclopedia & Predictor",
+    page_title="Animal Encyclopedia AI",
     page_icon="🐾",
     layout="wide"
 )
 
-st.title("🐾 Animal Encyclopedia & Predictor")
+st.title("🐾 Animal Encyclopedia AI")
+
 st.write(
-    "Explore animals, identify animals using measurements, "
-    "or identify an animal from an image."
+    "Identify animals from images or search the biodiversity database."
 )
 
 
 # =========================================================
-# ANIMAL DATABASE
+# GEMINI API
 # =========================================================
 
-animals = {
+try:
 
-    "Dog": {
-        "emoji": "🐶",
-        "appearance": "Dogs have four legs, a tail, two ears and a muzzle.",
-        "colour": "Black, white, brown, golden and many combinations.",
-        "body": "Small to large muscular body depending on breed.",
-        "region": "Worldwide",
-        "habitat": "Homes, farms, villages and cities.",
-        "diet": "Omnivore",
-        "size": "Small to large",
-        "weight": "1–90 kg depending on breed",
-        "lifespan": "10–13 years",
-        "fact": "Dogs have an excellent sense of smell and are among humans' oldest domesticated companions."
-    },
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-    "Cat": {
-        "emoji": "🐱",
-        "appearance": "Cats have a small flexible body, four legs, pointed ears, whiskers and a tail.",
-        "colour": "White, black, grey, orange, brown and many combinations.",
-        "body": "Small, flexible and muscular body.",
-        "region": "Worldwide",
-        "habitat": "Homes, farms, cities and forests.",
-        "diet": "Carnivore",
-        "size": "Small",
-        "weight": "2–8 kg",
-        "lifespan": "12–18 years",
-        "fact": "Cats can rotate their ears to detect sounds from different directions."
-    },
+    gemini_client = genai.Client(
+        api_key=GEMINI_API_KEY
+    )
 
-    "Lion": {
-        "emoji": "🦁",
-        "appearance": "Large muscular cat. Adult males usually have a prominent mane.",
-        "colour": "Yellowish, golden or brown.",
-        "body": "Powerful body with strong legs and large paws.",
-        "region": "Africa and a small population in India",
-        "habitat": "Grasslands, savannas and open woodland.",
-        "diet": "Carnivore",
-        "size": "Large",
-        "weight": "120–250 kg",
-        "lifespan": "10–15 years in the wild",
-        "fact": "Lions commonly live in social groups called prides."
-    },
+except Exception:
 
-    "Tiger": {
-        "emoji": "🐯",
-        "appearance": "Large cat with distinctive dark stripes.",
-        "colour": "Orange, white and black.",
-        "body": "Long muscular body with powerful legs.",
-        "region": "Asia",
-        "habitat": "Forests, grasslands and wetlands.",
-        "diet": "Carnivore",
-        "size": "Large",
-        "weight": "75–300 kg",
-        "lifespan": "10–15 years",
-        "fact": "Every tiger has a unique stripe pattern."
-    },
+    gemini_client = None
 
-    "Elephant": {
-        "emoji": "🐘",
-        "appearance": "Huge body, long trunk, large ears and tusks in many individuals.",
-        "colour": "Grey to dark grey.",
-        "body": "Massive body supported by four thick legs.",
-        "region": "Africa and Asia",
-        "habitat": "Grasslands, forests and savannas.",
-        "diet": "Herbivore",
-        "size": "Very large",
-        "weight": "2,000–6,000+ kg",
-        "lifespan": "60–70 years",
-        "fact": "Elephants use their trunks for breathing, smelling, drinking and grabbing objects."
-    },
 
-    "Horse": {
-        "emoji": "🐴",
-        "appearance": "Large four-legged animal with a long neck, mane, tail and hooves.",
-        "colour": "White, black, brown, grey, chestnut and many combinations.",
-        "body": "Strong athletic body with long legs.",
-        "region": "Worldwide",
-        "habitat": "Grasslands, farms and open areas.",
-        "diet": "Herbivore",
-        "size": "Large",
-        "weight": "400–600 kg",
-        "lifespan": "25–30 years",
-        "fact": "Horses can sleep both standing up and lying down."
-    },
+# =========================================================
+# iNATURALIST API
+# =========================================================
 
-    "Giraffe": {
-        "emoji": "🦒",
-        "appearance": "Very tall animal with an extremely long neck and long legs.",
-        "colour": "Yellowish or orange with brown patches.",
-        "body": "Tall body with a long neck and long legs.",
-        "region": "Africa",
-        "habitat": "Savannas, grasslands and open woodlands.",
-        "diet": "Herbivore",
-        "size": "Very large",
-        "weight": "550–1,200 kg",
-        "lifespan": "20–25 years",
-        "fact": "Giraffes are the tallest living land animals."
-    },
+INAT_API = "https://api.inaturalist.org/v1"
 
-    "Panda": {
-        "emoji": "🐼",
-        "appearance": "Large bear-like animal with distinctive black-and-white fur.",
-        "colour": "Black and white.",
-        "body": "Round, heavy body with strong limbs.",
-        "region": "China",
-        "habitat": "Mountain forests.",
-        "diet": "Mostly bamboo",
-        "size": "Medium to large",
-        "weight": "70–120 kg",
-        "lifespan": "15–20 years in the wild",
-        "fact": "Giant pandas spend many hours each day eating bamboo."
-    },
 
-    "Monkey": {
-        "emoji": "🐒",
-        "appearance": "Primates with hands, feet, expressive faces and usually a tail.",
-        "colour": "Brown, grey, black, golden and other colours.",
-        "body": "Agile body with flexible limbs.",
-        "region": "Africa, Asia and the Americas depending on species.",
-        "habitat": "Forests, grasslands and mountains.",
-        "diet": "Omnivore",
-        "size": "Small to medium",
-        "weight": "Varies greatly by species",
-        "lifespan": "Varies by species",
-        "fact": "Many monkeys use complex social communication and live in groups."
-    },
+# =========================================================
+# GEMINI IMAGE IDENTIFICATION
+# =========================================================
 
-    "Zebra": {
-        "emoji": "🦓",
-        "appearance": "Horse-like animal famous for its black-and-white stripes.",
-        "colour": "Black and white.",
-        "body": "Strong body with four long legs and hooves.",
-        "region": "Africa",
-        "habitat": "Grasslands, savannas and open woodland.",
-        "diet": "Herbivore",
-        "size": "Medium to large",
-        "weight": "175–450 kg",
-        "lifespan": "20–25 years",
-        "fact": "Every zebra has a unique stripe pattern."
-    }
+def identify_animal_with_gemini(image):
+
+    if gemini_client is None:
+
+        return None, (
+            "Gemini API key is not configured. "
+            "Please add GEMINI_API_KEY to Streamlit Secrets."
+        )
+
+    prompt = """
+You are an expert wildlife and animal identification assistant.
+
+Analyze the uploaded image carefully.
+
+Identify the animal visible in the image.
+
+Return ONLY valid JSON in this exact structure:
+
+{
+  "animal": "common animal name",
+  "scientific_name": "scientific name if reasonably identifiable",
+  "confidence": 0,
+  "reason": "short visual reason"
 }
 
+Important rules:
 
-# =========================================================
-# MEASUREMENT MODEL
-# =========================================================
+1. Do not force the animal into a predefined list.
+2. If it is a rabbit, say rabbit.
+3. If it is a horse, say horse.
+4. If it is a giraffe, say giraffe.
+5. If it is a bird, identify the bird if possible.
+6. If species identification is uncertain, give the broader animal
+   and use a lower confidence.
+7. Never invent a species.
+8. Confidence must be a number from 0 to 100.
+"""
 
-features = [
-    [40,70,10,4], [50,80,20,4], [60,100,30,4],
+    try:
 
-    [20,40,3,4], [25,45,4,4], [30,50,6,4],
+        response = gemini_client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=[
+                prompt,
+                image
+            ]
+        )
 
-    [100,180,150,4], [120,200,190,4], [130,220,220,4],
+        text = response.text.strip()
 
-    [90,180,120,4], [100,200,180,4], [110,220,230,4],
+        # Remove markdown JSON fences if Gemini adds them
+        text = text.replace("```json", "")
+        text = text.replace("```", "")
+        text = text.strip()
 
-    [250,400,3000,4], [300,500,5000,4], [350,600,6000,4],
+        import json
 
-    [140,220,400,4], [160,250,500,4], [170,270,600,4],
+        result = json.loads(text)
 
-    [400,280,800,4], [500,300,1000,4], [550,350,1200,4],
+        return result, None
 
-    [60,120,70,4], [70,150,100,4], [80,170,120,4],
+    except Exception as e:
 
-    [40,60,8,4], [60,80,15,4], [80,100,25,4],
-
-    [120,200,250,4], [130,230,350,4], [150,250,400,4]
-]
-
-labels = [
-    "Dog","Dog","Dog",
-    "Cat","Cat","Cat",
-    "Lion","Lion","Lion",
-    "Tiger","Tiger","Tiger",
-    "Elephant","Elephant","Elephant",
-    "Horse","Horse","Horse",
-    "Giraffe","Giraffe","Giraffe",
-    "Panda","Panda","Panda",
-    "Monkey","Monkey","Monkey",
-    "Zebra","Zebra","Zebra"
-]
-
-measurement_model = RandomForestClassifier(
-    n_estimators=100,
-    random_state=42
-)
-
-measurement_model.fit(features, labels)
+        return None, str(e)
 
 
 # =========================================================
-# CLIP MODEL
+# SEARCH iNATURALIST TAXON
 # =========================================================
 
-@st.cache_resource
-def load_clip_model():
+def search_taxon(animal_name):
 
-    clip_model = CLIPModel.from_pretrained(
-        "openai/clip-vit-base-patch32"
-    )
+    try:
 
-    processor = CLIPProcessor.from_pretrained(
-        "openai/clip-vit-base-patch32"
-    )
+        url = f"{INAT_API}/taxa/autocomplete"
 
-    clip_model.eval()
+        params = {
+            "q": animal_name,
+            "per_page": 5
+        }
 
-    return clip_model, processor
+        response = requests.get(
+            url,
+            params=params,
+            timeout=15
+        )
 
+        if response.status_code != 200:
+            return None
 
-# =========================================================
-# DISPLAY ANIMAL INFORMATION
-# =========================================================
+        data = response.json()
 
-def display_animal_info(animal_name):
+        results = data.get(
+            "results",
+            []
+        )
 
-    info = animals[animal_name]
+        if not results:
+            return None
 
-    st.subheader(
-        f"{info['emoji']} {animal_name}"
-    )
+        # Prefer an animal result where possible
+        for result in results:
 
-    st.write(
-        f"**Appearance:** {info['appearance']}"
-    )
+            iconic_taxon = result.get(
+                "iconic_taxon_name"
+            )
 
-    st.write(
-        f"**Colour:** {info['colour']}"
-    )
+            if iconic_taxon in [
+                "Mammalia",
+                "Aves",
+                "Reptilia",
+                "Amphibia",
+                "Actinopterygii",
+                "Insecta",
+                "Arachnida",
+                "Mollusca"
+            ]:
 
-    st.write(
-        f"**Body:** {info['body']}"
-    )
+                return result
 
-    st.write(
-        f"**Region:** {info['region']}"
-    )
+        return results[0]
 
-    st.write(
-        f"**Habitat:** {info['habitat']}"
-    )
+    except Exception:
 
-    st.write(
-        f"**Diet:** {info['diet']}"
-    )
-
-    st.write(
-        f"**Size:** {info['size']}"
-    )
-
-    st.write(
-        f"**Weight:** {info['weight']}"
-    )
-
-    st.write(
-        f"**Lifespan:** {info['lifespan']}"
-    )
-
-    st.info(
-        f"💡 **Interesting Fact:** {info['fact']}"
-    )
+        return None
 
 
 # =========================================================
-# MAIN MENU
+# GET iNATURALIST OBSERVATIONS + PHOTOS
+# =========================================================
+
+def get_animal_observations(
+    taxon_name,
+    taxon_id=None,
+    number=6
+):
+
+    try:
+
+        url = f"{INAT_API}/observations"
+
+        params = {
+            "photos": "true",
+            "per_page": number,
+            "order_by": "votes",
+            "order": "desc",
+            "quality_grade": "research"
+        }
+
+        if taxon_id:
+
+            params["taxon_id"] = taxon_id
+
+        else:
+
+            params["taxon_name"] = taxon_name
+
+        response = requests.get(
+            url,
+            params=params,
+            timeout=20
+        )
+
+        if response.status_code != 200:
+            return []
+
+        data = response.json()
+
+        return data.get(
+            "results",
+            []
+        )
+
+    except Exception:
+
+        return []
+
+
+# =========================================================
+# GET PHOTO URL
+# =========================================================
+
+def get_large_photo_url(photo):
+
+    url = photo.get("url")
+
+    if not url:
+        return None
+
+    # iNaturalist photo URLs commonly use
+    # /square., /small., /medium., /large., /original.
+    # Prefer large for the application.
+    url = url.replace(
+        "/square.",
+        "/large."
+    )
+
+    url = url.replace(
+        "/small.",
+        "/large."
+    )
+
+    url = url.replace(
+        "/medium.",
+        "/large."
+    )
+
+    return url
+
+
+# =========================================================
+# DISPLAY DATABASE INFORMATION
+# =========================================================
+
+def display_animal_data(
+    taxon,
+    observations
+):
+
+    if not taxon:
+
+        st.warning(
+            "No matching animal was found in the biodiversity database."
+        )
+
+        return
+
+
+    common_name = taxon.get(
+        "preferred_common_name"
+    )
+
+    scientific_name = taxon.get(
+        "name",
+        "Unknown"
+    )
+
+    rank = taxon.get(
+        "rank",
+        "Unknown"
+    )
+
+    iconic_taxon = taxon.get(
+        "iconic_taxon_name",
+        "Unknown"
+    )
+
+    st.divider()
+
+    st.header(
+        f"🐾 {common_name or scientific_name}"
+    )
+
+    st.write(
+        f"**Scientific name:** "
+        f"{scientific_name}"
+    )
+
+    st.write(
+        f"**Taxonomic rank:** "
+        f"{rank}"
+    )
+
+    st.write(
+        f"**Major group:** "
+        f"{iconic_taxon}"
+    )
+
+
+    # -----------------------------------------------------
+    # TAXON PHOTO
+    # -----------------------------------------------------
+
+    default_photo = taxon.get(
+        "default_photo"
+    )
+
+    if default_photo:
+
+        photo_url = get_large_photo_url(
+            default_photo
+        )
+
+        if photo_url:
+
+            st.image(
+                photo_url,
+                caption=(
+                    common_name
+                    or scientific_name
+                ),
+                use_container_width=True
+            )
+
+
+    # -----------------------------------------------------
+    # OBSERVATION PHOTOS
+    # -----------------------------------------------------
+
+    if observations:
+
+        st.subheader(
+            "📸 More photographs"
+        )
+
+        photo_urls = []
+
+        for observation in observations:
+
+            photos = observation.get(
+                "photos",
+                []
+            )
+
+            for photo in photos:
+
+                photo_url = get_large_photo_url(
+                    photo
+                )
+
+                if photo_url:
+
+                    photo_urls.append(
+                        photo_url
+                    )
+
+                if len(photo_urls) >= 6:
+                    break
+
+            if len(photo_urls) >= 6:
+                break
+
+
+        if photo_urls:
+
+            st.image(
+                photo_urls,
+                use_container_width=True
+            )
+
+
+    # -----------------------------------------------------
+    # SOURCE
+    # -----------------------------------------------------
+
+    taxon_id = taxon.get(
+        "id"
+    )
+
+    if taxon_id:
+
+        st.markdown(
+            f"[🌐 View this taxon on iNaturalist]"
+            f"(https://www.inaturalist.org/taxa/{taxon_id})"
+        )
+
+
+# =========================================================
+# MENU
 # =========================================================
 
 option = st.radio(
     "Choose an option:",
     [
-        "📚 Explore Animal",
-        "🤖 Identify Unknown Animal",
-        "📷 Identify Animal from Image"
+        "📷 Identify Animal from Image",
+        "🔎 Search Animal"
     ]
 )
-
-
-# =========================================================
-# EXPLORE ANIMAL
-# =========================================================
-
-if option == "📚 Explore Animal":
-
-    selected_animal = st.selectbox(
-        "Select an animal:",
-        list(animals.keys())
-    )
-
-    if st.button("Show Animal Information"):
-
-        display_animal_info(selected_animal)
-
-
-# =========================================================
-# MEASUREMENT IDENTIFICATION
-# =========================================================
-
-elif option == "🤖 Identify Unknown Animal":
-
-    st.subheader("Enter Animal Measurements")
-
-    height = st.number_input(
-        "Height (cm)",
-        min_value=1.0,
-        value=50.0
-    )
-
-    length = st.number_input(
-        "Body Length (cm)",
-        min_value=1.0,
-        value=80.0
-    )
-
-    weight = st.number_input(
-        "Weight (kg)",
-        min_value=0.1,
-        value=20.0
-    )
-
-    legs = st.number_input(
-        "Number of Legs",
-        min_value=0,
-        max_value=10,
-        value=4
-    )
-
-    if st.button("🔍 Identify Animal"):
-
-        prediction = measurement_model.predict(
-            [[height, length, weight, legs]]
-        )[0]
-
-        st.success(
-            f"🐾 Predicted Animal: **{prediction}**"
-        )
-
-        display_animal_info(prediction)
 
 
 # =========================================================
 # IMAGE IDENTIFICATION
 # =========================================================
 
-elif option == "📷 Identify Animal from Image":
+if option == "📷 Identify Animal from Image":
 
-    st.subheader("📷 Identify Animal from Image")
-
-    uploaded_image = st.file_uploader(
-        "Upload an animal photo",
-        type=["jpg", "jpeg", "png"]
+    st.header(
+        "📷 Identify an Animal"
     )
 
-    if uploaded_image is not None:
+    uploaded_file = st.file_uploader(
+        "Upload an animal photograph",
+        type=[
+            "jpg",
+            "jpeg",
+            "png",
+            "webp"
+        ]
+    )
+
+
+    if uploaded_file:
 
         image = Image.open(
-            uploaded_image
+            uploaded_file
         ).convert("RGB")
+
 
         st.image(
             image,
@@ -391,222 +453,165 @@ elif option == "📷 Identify Animal from Image":
             use_container_width=True
         )
 
-        if st.button("🔍 Identify Animal"):
+
+        if st.button(
+            "🔍 Identify Animal"
+        ):
 
             with st.spinner(
-                "AI is analyzing the image..."
+                "AI is analyzing the animal..."
             ):
 
-                clip_model, processor = load_clip_model()
-
-                animal_names = list(
-                    animals.keys()
-                )
-
-                # Multiple descriptions help CLIP
-                # understand the visual concept.
-                prompts = []
-
-                for animal in animal_names:
-
-                    prompts.append(
-                        f"a photo of a {animal.lower()}"
+                result, error = (
+                    identify_animal_with_gemini(
+                        image
                     )
-
-                inputs = processor(
-                    text=prompts,
-                    images=image,
-                    return_tensors="pt",
-                    padding=True
                 )
 
-                with torch.no_grad():
 
-                    outputs = clip_model(
-                        **inputs
-                    )
-
-                    probabilities = (
-                        outputs.logits_per_image
-                        .softmax(dim=1)[0]
-                    )
-
-                top_values, top_indices = torch.topk(
-                    probabilities,
-                    k=3
-                )
-
-                best_index = top_indices[0].item()
-
-                predicted_animal = animal_names[
-                    best_index
-                ]
-
-                confidence = (
-                    top_values[0].item() * 100
-                )
-
-            # =================================================
-            # RESULT
-            # =================================================
-
-            st.success(
-                f"🐾 Predicted Animal: **{predicted_animal}**"
-            )
-
-            st.write(
-                f"AI confidence: **{confidence:.2f}%**"
-            )
-
-            display_animal_info(
-                predicted_animal
-            )
-
-            # =================================================
-            # TOP 3 RESULTS
-            # =================================================
-
-            st.subheader(
-                "🔎 Top 3 AI Predictions"
-            )
-
-            for value, index in zip(
-                top_values,
-                top_indices
-            ):
-
-                animal = animal_names[
-                    index.item()
-                ]
-
-                percentage = (
-                    value.item() * 100
-                )
-
-                st.write(
-                    f"{animals[animal]['emoji']} "
-                    f"**{animal}** — "
-                    f"{percentage:.2f}%"
-)
-            
-# =========================================================
-# iNATURALIST DATABASE TEST
-# =========================================================
-
-import requests
-
-st.divider()
-st.header("🌍 Animal Database")
-
-database_animal = st.text_input(
-    "Search an animal in the biodiversity database:",
-    placeholder="Example: Horse"
-)
-
-if st.button("🔎 Search Database"):
-
-    if database_animal.strip():
-
-        with st.spinner("Searching iNaturalist..."):
-
-            url = "https://api.inaturalist.org/v1/observations"
-
-            params = {
-                "taxon_name": database_animal.strip(),
-                "photos": "true",
-                "per_page": 6,
-                "order_by": "votes",
-                "order": "desc"
-            }
-
-            try:
-
-                response = requests.get(
-                    url,
-                    params=params,
-                    timeout=15
-                )
-
-                if response.status_code == 200:
-
-                    data = response.json()
-                    results = data.get("results", [])
-
-                    if results:
-
-                        st.success(
-                            f"Found {len(results)} photographs!"
-                        )
-
-                        for observation in results:
-
-                            photos = observation.get(
-                                "photos", []
-                            )
-
-                            taxon = observation.get(
-                                "taxon", {}
-                            )
-
-                            common_name = taxon.get(
-                                "preferred_common_name",
-                                database_animal
-                            )
-
-                            scientific_name = taxon.get(
-                                "name",
-                                "Unknown"
-                            )
-
-                            st.subheader(
-                                f"🐾 {common_name}"
-                            )
-
-                            st.write(
-                                f"**Scientific name:** "
-                                f"{scientific_name}"
-                            )
-
-                            if photos:
-
-                                photo_urls = []
-
-                                for photo in photos[:3]:
-
-                                    photo_url = photo.get(
-                                        "url"
-                                    )
-
-                                    if photo_url:
-                                        photo_urls.append(
-                                            photo_url
-                                        )
-
-                                if photo_urls:
-
-                                    st.image(
-                                        photo_urls,
-                                        width=250
-                                    )
-
-                            st.divider()
-
-                    else:
-
-                        st.warning(
-                            "No photographs were found "
-                            "for this search."
-                        )
-
-                else:
-
-                    st.error(
-                        f"Database request failed: "
-                        f"{response.status_code}"
-                    )
-
-            except Exception as e:
+            if error:
 
                 st.error(
-                    f"Connection error: {e}"
+                    f"AI identification error: {error}"
                 )
+
+            elif result:
+
+                animal_name = result.get(
+                    "animal",
+                    "Unknown"
+                )
+
+                scientific_name = result.get(
+                    "scientific_name",
+                    ""
+                )
+
+                confidence = result.get(
+                    "confidence",
+                    0
+                )
+
+                reason = result.get(
+                    "reason",
+                    ""
+                )
+
+
+                st.success(
+                    f"🐾 Identified Animal: "
+                    f"**{animal_name.title()}**"
+                )
+
+                st.metric(
+                    "AI confidence",
+                    f"{confidence}%"
+                )
+
+                if reason:
+
+                    st.write(
+                        f"**Why:** {reason}"
+                    )
+
+
+                # -----------------------------------------
+                # SEARCH DATABASE
+                # -----------------------------------------
+
+                with st.spinner(
+                    "Finding species information and photographs..."
+                ):
+
+                    taxon = None
+
+                    # Try scientific name first
+                    if scientific_name:
+
+                        taxon = search_taxon(
+                            scientific_name
+                        )
+
+
+                    # If scientific name failed,
+                    # search common name
+                    if not taxon:
+
+                        taxon = search_taxon(
+                            animal_name
+                        )
+
+
+                    observations = []
+
+                    if taxon:
+
+                        observations = (
+                            get_animal_observations(
+                                taxon.get("name"),
+                                taxon.get("id"),
+                                6
+                            )
+                        )
+
+
+                display_animal_data(
+                    taxon,
+                    observations
+                )
+
+
+# =========================================================
+# ANIMAL SEARCH
+# =========================================================
+
+elif option == "🔎 Search Animal":
+
+    st.header(
+        "🔎 Search the Animal Database"
+    )
+
+    search_name = st.text_input(
+        "Enter any animal name:",
+        placeholder="Example: Snow Leopard"
+    )
+
+
+    if st.button(
+        "🔎 Search"
+    ):
+
+        if not search_name.strip():
+
+            st.warning(
+                "Please enter an animal name."
+            )
+
+        else:
+
+            with st.spinner(
+                "Searching biodiversity database..."
+            ):
+
+                taxon = search_taxon(
+                    search_name.strip()
+                )
+
+
+                observations = []
+
+                if taxon:
+
+                    observations = (
+                        get_animal_observations(
+                            taxon.get("name"),
+                            taxon.get("id"),
+                            6
+                        )
+                    )
+
+
+            display_animal_data(
+                taxon,
+                observations
+    )
