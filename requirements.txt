@@ -1,6 +1,5 @@
 streamlit
 scikit-learn
-torch
-transformers
-Pillow
+pillow
 requests
+google-genai
