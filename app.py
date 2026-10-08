@@ -1,170 +1,175 @@
 import streamlit as st
 from sklearn.ensemble import RandomForestClassifier
+from PIL import Image
+import torch
+from transformers import CLIPProcessor, CLIPModel
 
-# Image model imports
-import tensorflow as tf
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.applications.mobilenet_v2 import (
-    preprocess_input,
-    decode_predictions
+
+# =========================================================
+# PAGE
+# =========================================================
+
+st.set_page_config(
+    page_title="Animal Encyclopedia & Predictor",
+    page_icon="🐾",
+    layout="wide"
 )
 
-
 st.title("🐾 Animal Encyclopedia & Predictor")
-st.write("Explore animals, identify an unknown animal using measurements, or upload an animal image!")
+st.write("Explore animals, identify animals using measurements, or identify an animal from an image.")
 
 
-# ============================================================
-# ANIMAL INFORMATION
-# ============================================================
+# =========================================================
+# ANIMAL DATABASE
+# =========================================================
 
 animals = {
 
     "Dog": {
         "emoji": "🐶",
-        "appearance": "Dogs have four legs, paws, a tail, fur, and many different body shapes.",
-        "colour": "Black, white, brown, golden, grey and many mixed patterns.",
-        "body": "Four legs with paws, a flexible spine, tail, ears and a strong sense of smell.",
-        "region": "Domestic dogs are found almost everywhere in the world.",
-        "habitat": "Human homes, farms, towns and cities.",
-        "diet": "Omnivorous.",
-        "size": "Highly variable depending on breed.",
-        "weight": "Roughly 1.5–90+ kg depending on breed.",
-        "lifespan": "Often around 10–13 years.",
-        "fact": "Dogs have an exceptionally strong sense of smell."
+        "appearance": "Dogs have four legs, a tail, two ears and a muzzle.",
+        "colour": "Many colours including black, white, brown, golden and mixed colours.",
+        "body": "Medium-sized mammal with a muscular body.",
+        "region": "Worldwide",
+        "habitat": "Homes, farms, villages and cities.",
+        "diet": "Omnivore",
+        "size": "Small to large",
+        "weight": "1–90 kg depending on breed",
+        "lifespan": "10–13 years",
+        "fact": "Dogs have an excellent sense of smell and are among humans' oldest domesticated companions."
     },
 
     "Cat": {
         "emoji": "🐱",
-        "appearance": "Cats have a compact body, four legs, paws, a tail, whiskers and retractable claws.",
-        "colour": "White, black, orange, grey, brown and many combinations.",
-        "body": "Four legs, padded paws, flexible spine, tail, whiskers and sharp claws.",
-        "region": "Domestic cats are found throughout the world.",
-        "habitat": "Homes, farms, towns and cities.",
-        "diet": "Carnivorous.",
-        "size": "Usually around 45–50 cm long, excluding the tail.",
-        "weight": "Often around 3–6 kg.",
-        "lifespan": "Around 12–18 years.",
-        "fact": "Cats can rotate their ears to help locate sounds."
+        "appearance": "Cats have a small flexible body, four legs, pointed ears, whiskers and a long tail.",
+        "colour": "White, black, grey, orange, brown and many combinations.",
+        "body": "Small, flexible and muscular body.",
+        "region": "Worldwide",
+        "habitat": "Homes, farms, cities and forests.",
+        "diet": "Carnivore",
+        "size": "Small",
+        "weight": "2–8 kg",
+        "lifespan": "12–18 years",
+        "fact": "Cats can rotate their ears to detect sounds from different directions."
     },
 
     "Lion": {
         "emoji": "🦁",
-        "appearance": "Lions have muscular bodies, four legs, a long tail and a large head.",
-        "colour": "Usually tan, golden or brownish.",
-        "body": "Four powerful legs, paws, claws, large teeth and a long tail.",
-        "region": "Mainly sub-Saharan Africa, with a small wild population in India.",
+        "appearance": "Large muscular cat. Adult males usually have a prominent mane.",
+        "colour": "Yellowish, golden or brown.",
+        "body": "Powerful body with strong legs and large paws.",
+        "region": "Africa and a small population in India",
         "habitat": "Grasslands, savannas and open woodland.",
-        "diet": "Carnivorous.",
-        "size": "Large cat; males are generally larger than females.",
-        "weight": "Often around 120–250 kg.",
-        "lifespan": "Around 10–15 years in the wild.",
-        "fact": "Lions normally live in social groups called prides."
+        "diet": "Carnivore",
+        "size": "Large",
+        "weight": "120–250 kg",
+        "lifespan": "10–15 years in the wild",
+        "fact": "Lions are the only big cats that commonly live in social groups called prides."
     },
 
     "Tiger": {
         "emoji": "🐯",
-        "appearance": "Tigers have a large muscular body, four legs, a long tail and a striped coat.",
-        "colour": "Orange or reddish-orange with dark stripes.",
-        "body": "Four powerful legs, large paws, claws, strong jaws and a long tail.",
-        "region": "Parts of Asia, including India, Russia and Southeast Asia.",
+        "appearance": "Large cat with distinctive dark stripes.",
+        "colour": "Orange, white and black.",
+        "body": "Long muscular body with powerful legs.",
+        "region": "Asia",
         "habitat": "Forests, grasslands and wetlands.",
-        "diet": "Carnivorous.",
-        "size": "The largest living cat species.",
-        "weight": "Often around 70–300 kg.",
-        "lifespan": "Around 10–15 years in the wild.",
+        "diet": "Carnivore",
+        "size": "Large",
+        "weight": "75–300 kg",
+        "lifespan": "10–15 years",
         "fact": "Every tiger has a unique stripe pattern."
     },
 
     "Elephant": {
         "emoji": "🐘",
-        "appearance": "Elephants have huge bodies, large ears, four legs and a long trunk.",
-        "colour": "Usually grey to grey-brown.",
-        "body": "Four thick legs, a trunk, large ears, tusks in many individuals and a short tail.",
-        "region": "Africa and parts of Asia.",
-        "habitat": "Savannas, forests, grasslands and wetlands.",
-        "diet": "Herbivorous.",
-        "size": "The largest living land animals.",
-        "weight": "Can weigh several thousand kilograms.",
-        "lifespan": "Often around 60–70 years.",
-        "fact": "An elephant's trunk is used for breathing, smelling, touching, drinking and grabbing food."
+        "appearance": "Huge body, long trunk, large ears and tusks in many individuals.",
+        "colour": "Grey to dark grey.",
+        "body": "Massive body supported by four thick legs.",
+        "region": "Africa and Asia",
+        "habitat": "Grasslands, forests and savannas.",
+        "diet": "Herbivore",
+        "size": "Very large",
+        "weight": "2,000–6,000+ kg",
+        "lifespan": "60–70 years",
+        "fact": "Elephants use their trunks for breathing, smelling, drinking and grabbing objects."
     },
 
     "Horse": {
         "emoji": "🐴",
-        "appearance": "Horses have a large body, four long legs, hooves, a mane and a tail.",
-        "colour": "Black, brown, chestnut, grey, white and many patterns.",
-        "body": "Four legs ending in hooves, a mane along the neck and a long tail.",
-        "region": "Domestic horses are found worldwide.",
-        "habitat": "Grasslands, farms and plains.",
-        "diet": "Herbivorous.",
-        "size": "Varies greatly among breeds.",
-        "weight": "Often around 400–600 kg.",
-        "lifespan": "Often around 25–30 years.",
+        "appearance": "Large four-legged animal with a long neck, mane, tail and hooves.",
+        "colour": "White, black, brown, grey, chestnut and many combinations.",
+        "body": "Strong athletic body with long legs.",
+        "region": "Worldwide",
+        "habitat": "Grasslands, farms and open areas.",
+        "diet": "Herbivore",
+        "size": "Large",
+        "weight": "400–600 kg",
+        "lifespan": "25–30 years",
         "fact": "Horses can sleep both standing up and lying down."
     },
 
     "Giraffe": {
         "emoji": "🦒",
-        "appearance": "Giraffes have extremely long necks and legs and a sloping back.",
-        "colour": "Light brown or tan with darker patches.",
-        "body": "Four very long legs, a long neck, small horns called ossicones and a long tail.",
-        "region": "Sub-Saharan Africa.",
+        "appearance": "Very tall animal with an extremely long neck and long legs.",
+        "colour": "Yellowish or orange with brown patches.",
+        "body": "Tall body with long neck and legs.",
+        "region": "Africa",
         "habitat": "Savannas, grasslands and open woodlands.",
-        "diet": "Herbivorous; mainly leaves.",
-        "size": "The tallest living land animals.",
-        "weight": "Often around 800–1,200 kg.",
-        "lifespan": "Around 20–25 years in the wild.",
-        "fact": "Giraffes can reach vegetation high above the ground."
+        "diet": "Herbivore",
+        "size": "Very large",
+        "weight": "550–1,200 kg",
+        "lifespan": "20–25 years",
+        "fact": "Giraffes are the tallest living land animals."
     },
 
     "Panda": {
         "emoji": "🐼",
-        "appearance": "Giant pandas have a round body, black-and-white fur, four legs and a short tail.",
-        "colour": "Distinctive black-and-white coat.",
-        "body": "Four legs, large paws, strong jaws and teeth adapted for crushing bamboo.",
-        "region": "Mountainous areas of central China.",
-        "habitat": "Temperate mountain forests with bamboo.",
-        "diet": "Mostly bamboo.",
-        "size": "About 1.2–1.9 metres long.",
-        "weight": "Adults commonly weigh around 70–120 kg.",
-        "lifespan": "Around 15–20 years in the wild.",
-        "fact": "Pandas have a specialized wrist bone that helps them hold bamboo."
+        "appearance": "Large bear-like animal with distinctive black-and-white fur.",
+        "colour": "Black and white.",
+        "body": "Round, heavy body with strong limbs.",
+        "region": "China",
+        "habitat": "Mountain forests.",
+        "diet": "Mostly bamboo",
+        "size": "Medium to large",
+        "weight": "70–120 kg",
+        "lifespan": "15–20 years in the wild",
+        "fact": "Giant pandas spend many hours each day eating bamboo."
     },
 
     "Monkey": {
         "emoji": "🐒",
-        "appearance": "Monkeys have four limbs, a head, torso and often a tail.",
-        "colour": "Extremely variable depending on species.",
-        "body": "Four limbs, grasping hands and feet, and often a tail.",
-        "region": "Africa, Asia, Central America and South America depending on species.",
-        "habitat": "Forests, woodlands and grasslands.",
-        "diet": "Often omnivorous.",
-        "size": "Ranges from very small to much larger monkeys.",
-        "weight": "Highly variable by species.",
-        "lifespan": "Varies greatly by species.",
-        "fact": "Monkeys are highly diverse, with many different species."
+        "appearance": "Primates with hands, feet, expressive faces and usually a tail.",
+        "colour": "Brown, grey, black, golden and other colours depending on species.",
+        "body": "Agile body with flexible limbs.",
+        "region": "Africa, Asia and the Americas depending on species.",
+        "habitat": "Forests, grasslands and mountains.",
+        "diet": "Omnivore",
+        "size": "Small to medium",
+        "weight": "Varies greatly by species",
+        "lifespan": "Varies by species",
+        "fact": "Many monkeys use complex social communication and live in groups."
     },
 
     "Zebra": {
         "emoji": "🦓",
-        "appearance": "Zebras have horse-like bodies, four legs, hooves, upright manes and stripes.",
-        "colour": "Black-and-white striped coat.",
-        "body": "Four legs ending in hooves, a mane, tail and strong teeth.",
-        "region": "Eastern and southern Africa.",
-        "habitat": "Grasslands, savannas and some woodland areas.",
-        "diet": "Herbivorous; mainly grasses.",
-        "size": "Medium-to-large hoofed mammals.",
-        "weight": "Often around 175–450 kg.",
-        "lifespan": "Often around 20–25 years in the wild.",
-        "fact": "Each zebra has a unique pattern of stripes."
+        "appearance": "Horse-like animal famous for its black-and-white stripes.",
+        "colour": "Black and white.",
+        "body": "Strong body with four long legs and hooves.",
+        "region": "Africa",
+        "habitat": "Grasslands, savannas and open woodland.",
+        "diet": "Herbivore",
+        "size": "Medium to large",
+        "weight": "175–450 kg",
+        "lifespan": "20–25 years",
+        "fact": "Every zebra has a unique stripe pattern."
     }
 }
 
 
-# ============================================================
-# MACHINE LEARNING MODEL - MEASUREMENT PREDICTOR
-# ============================================================
+# =========================================================
+# RANDOM FOREST MEASUREMENT MODEL
+# =========================================================
 
 features = [
     [40,70,10,4], [50,80,20,4], [60,100,30,4],
@@ -200,184 +205,83 @@ model = RandomForestClassifier(
 model.fit(features, labels)
 
 
-# ============================================================
-# IMAGE MODEL
-# ============================================================
+# =========================================================
+# CLIP IMAGE MODEL
+# =========================================================
 
 @st.cache_resource
-def load_image_model():
-    return MobileNetV2(
-        weights="imagenet"
+def load_clip_model():
+
+    model = CLIPModel.from_pretrained(
+        "openai/clip-vit-base-patch32"
+    )
+
+    processor = CLIPProcessor.from_pretrained(
+        "openai/clip-vit-base-patch32"
+    )
+
+    return model, processor
+
+
+# =========================================================
+# DISPLAY ANIMAL INFORMATION
+# =========================================================
+
+def display_animal_info(animal_name):
+
+    info = animals[animal_name]
+
+    st.subheader(
+        f"{info['emoji']} {animal_name}"
+    )
+
+    st.write(
+        f"**Appearance:** {info['appearance']}"
+    )
+
+    st.write(
+        f"**Colour:** {info['colour']}"
+    )
+
+    st.write(
+        f"**Body:** {info['body']}"
+    )
+
+    st.write(
+        f"**Region:** {info['region']}"
+    )
+
+    st.write(
+        f"**Habitat:** {info['habitat']}"
+    )
+
+    st.write(
+        f"**Diet:** {info['diet']}"
+    )
+
+    st.write(
+        f"**Size:** {info['size']}"
+    )
+
+    st.write(
+        f"**Weight:** {info['weight']}"
+    )
+
+    st.write(
+        f"**Lifespan:** {info['lifespan']}"
+    )
+
+    st.info(
+        f"💡 **Interesting Fact:** {info['fact']}"
     )
 
 
-image_model = load_image_model()
-
-
-# ============================================================
-# IMAGE CLASS MAPPING
-# ============================================================
-
-dog_classes = {
-    "Rhodesian_ridgeback",
-    "Staffordshire_bullterrier",
-    "basenji",
-    "miniature_pinscher",
-    "dingo",
-    "golden_retriever",
-    "Labrador_retriever",
-    "German_shepherd",
-    "Siberian_husky",
-    "Doberman",
-    "Rottweiler",
-    "boxer",
-    "beagle",
-    "pug",
-    "Chihuahua",
-    "French_bulldog",
-    "Great_Dane",
-    "Saint_Bernard",
-    "malinois",
-    "Border_collie",
-    "collie",
-    "flat-coated_retriever",
-    "Afghan_hound",
-    "Saluki",
-    "whippet",
-    "Italian_greyhound",
-    "Ibizan_hound",
-    "Gordon_setter",
-    "Irish_setter",
-    "groenendael",
-    "African_hunting_dog"
-}
-
-cat_classes = {
-    "tabby",
-    "tiger_cat",
-    "Persian_cat",
-    "Siamese_cat",
-    "Egyptian_cat",
-    "Angora"
-}
-
-lion_classes = {
-    "lion"
-}
-
-tiger_classes = {
-    "tiger"
-}
-
-elephant_classes = {
-    "African_elephant",
-    "Indian_elephant",
-    "tusker"
-}
-
-horse_classes = {
-    "sorrel",
-    "horse_cart"
-}
-
-panda_classes = {
-    "giant_panda"
-}
-
-monkey_classes = {
-    "macaque",
-    "baboon",
-    "guenon",
-    "patas",
-    "proboscis_monkey"
-}
-
-zebra_classes = {
-    "zebra"
-}
-
-
-def convert_to_animal(class_name):
-
-    if class_name in dog_classes:
-        return "Dog"
-
-    if class_name in cat_classes:
-        return "Cat"
-
-    if class_name in lion_classes:
-        return "Lion"
-
-    if class_name in tiger_classes:
-        return "Tiger"
-
-    if class_name in elephant_classes:
-        return "Elephant"
-
-    if class_name in horse_classes:
-        return "Horse"
-
-    if class_name in panda_classes:
-        return "Panda"
-
-    if class_name in monkey_classes:
-        return "Monkey"
-
-    if class_name in zebra_classes:
-        return "Zebra"
-
-    return None
-
-
-# ============================================================
-# FUNCTION TO DISPLAY ANIMAL INFORMATION
-# ============================================================
-
-def display_animal_info(predicted_animal):
-
-    info = animals[predicted_animal]
-
-    st.header(
-        info["emoji"] + " " + predicted_animal
-    )
-
-    st.subheader("👀 Appearance")
-    st.write(info["appearance"])
-
-    st.subheader("🎨 Colour")
-    st.write(info["colour"])
-
-    st.subheader("🦴 Body & Legs")
-    st.write(info["body"])
-
-    st.subheader("📏 Size")
-    st.write(info["size"])
-
-    st.subheader("⚖️ Weight")
-    st.write(info["weight"])
-
-    st.subheader("🌍 Region")
-    st.write(info["region"])
-
-    st.subheader("🌿 Habitat")
-    st.write(info["habitat"])
-
-    st.subheader("🍃 Diet")
-    st.write(info["diet"])
-
-    st.subheader("⏳ Lifespan")
-    st.write(info["lifespan"])
-
-    st.subheader("💡 Interesting Fact")
-    st.write(info["fact"])
-
-
-# ============================================================
-# APP OPTIONS
-# ============================================================
+# =========================================================
+# MAIN MENU
+# =========================================================
 
 option = st.radio(
-    "What would you like to do?",
+    "Choose an option:",
     [
         "📚 Explore Animal",
         "🤖 Identify Unknown Animal",
@@ -386,179 +290,169 @@ option = st.radio(
 )
 
 
-# ============================================================
-# EXPLORE ANIMAL
-# ============================================================
+# =========================================================
+# 1. EXPLORE ANIMAL
+# =========================================================
 
 if option == "📚 Explore Animal":
 
-    animal = st.selectbox(
-        "Which animal do you want to learn about?",
+    selected_animal = st.selectbox(
+        "Select an animal:",
         list(animals.keys())
     )
 
-    if st.button("🔍 Explore Animal"):
+    if st.button("Show Animal Information"):
 
-        info = animals[animal]
-
-        if animal == "Panda":
-            st.image(
-                "https://commons.wikimedia.org/wiki/Special:FilePath/Giant%20panda%20animal.jpg",
-                caption="Giant Panda"
-            )
-
-        display_animal_info(animal)
+        display_animal_info(selected_animal)
 
 
-# ============================================================
-# IDENTIFY UNKNOWN ANIMAL USING MEASUREMENTS
-# ============================================================
+# =========================================================
+# 2. IDENTIFY UNKNOWN ANIMAL
+# =========================================================
 
 elif option == "🤖 Identify Unknown Animal":
 
-    st.header("🤖 Identify an Unknown Animal")
-
-    st.write("Enter the animal's approximate measurements.")
+    st.subheader("Enter Animal Measurements")
 
     height = st.number_input(
-        "📏 Height (cm)",
+        "Height (cm)",
         min_value=1.0,
-        value=70.0
+        value=50.0
     )
 
     length = st.number_input(
-        "📐 Body Length (cm)",
+        "Body Length (cm)",
         min_value=1.0,
-        value=150.0
+        value=80.0
     )
 
     weight = st.number_input(
-        "⚖️ Weight (kg)",
+        "Weight (kg)",
         min_value=0.1,
-        value=100.0
+        value=20.0
     )
 
     legs = st.number_input(
-        "🦵 Number of Legs",
+        "Number of Legs",
         min_value=0,
-        max_value=8,
-        value=4,
-        step=1
+        max_value=10,
+        value=4
     )
 
-    if st.button("🔍 Predict Animal"):
+    if st.button("🔍 Identify Animal"):
 
         prediction = model.predict(
             [[height, length, weight, legs]]
-        )
-
-        predicted_animal = prediction[0]
+        )[0]
 
         st.success(
-            "🐾 Predicted Animal: " + predicted_animal
+            f"🐾 Predicted Animal: **{prediction}**"
         )
 
-        display_animal_info(predicted_animal)
+        display_animal_info(prediction)
 
 
-# ============================================================
-# IDENTIFY ANIMAL FROM IMAGE
-# ============================================================
+# =========================================================
+# 3. IDENTIFY ANIMAL FROM IMAGE
+# =========================================================
 
-else:
+elif option == "📷 Identify Animal from Image":
 
-    st.header("📷 Identify Animal from Image")
-
-    st.write(
-        "Upload a clear animal photograph and the AI will try to identify it."
-    )
+    st.subheader("📷 Upload an Animal Image")
 
     uploaded_image = st.file_uploader(
-        "Choose an animal image",
+        "Choose an image:",
         type=["jpg", "jpeg", "png"]
     )
 
     if uploaded_image is not None:
 
+        image = Image.open(uploaded_image).convert("RGB")
+
         st.image(
-            uploaded_image,
+            image,
             caption="Uploaded Image",
             use_container_width=True
         )
 
         if st.button("🔍 Identify Animal"):
 
-            with st.spinner("🔎 Analyzing the image..."):
+            with st.spinner("AI is analyzing the image..."):
 
-                img = tf.keras.utils.load_img(
-                    uploaded_image,
-                    target_size=(224, 224)
+                clip_model, processor = load_clip_model()
+
+                animal_names = list(animals.keys())
+
+                # Multiple descriptions make classification
+                # more reliable than using only animal names.
+                text_prompts = [
+                    f"a clear photo of a {animal.lower()}"
+                    for animal in animal_names
+                ]
+
+                inputs = processor(
+                    text=text_prompts,
+                    images=image,
+                    return_tensors="pt",
+                    padding=True
                 )
 
-                img_array = tf.keras.utils.img_to_array(img)
+                with torch.no_grad():
 
-                img_array = tf.expand_dims(
-                    img_array,
-                    0
+                    outputs = clip_model(**inputs)
+
+                    logits_per_image = outputs.logits_per_image
+
+                    probabilities = logits_per_image.softmax(
+                        dim=1
+                    )[0]
+
+                best_index = torch.argmax(
+                    probabilities
+                ).item()
+
+                predicted_animal = animal_names[
+                    best_index
+                ]
+
+                confidence = (
+                    probabilities[best_index].item()
+                    * 100
                 )
 
-                img_array = preprocess_input(
-                    img_array
-                )
+            st.success(
+                f"🐾 Predicted Animal: **{predicted_animal}**"
+            )
 
-                predictions = image_model.predict(
-                    img_array,
-                    verbose=0
-                )
+            st.write(
+                f"AI confidence: **{confidence:.2f}%**"
+            )
 
-                results = decode_predictions(
-                    predictions,
-                    top=5
-                )[0]
+            display_animal_info(
+                predicted_animal
+            )
 
-            predicted_animal = None
-            confidence = 0
-            original_class = None
+            # Show top 3 predictions
+            st.subheader("🔎 Other Possible Results")
 
-            for _, class_name, score in results:
+            top_values, top_indices = torch.topk(
+                probabilities,
+                k=3
+            )
 
-                animal = convert_to_animal(
-                    class_name
-                )
+            for value, index in zip(
+                top_values,
+                top_indices
+            ):
 
-                if animal is not None:
+                animal = animal_names[
+                    index.item()
+                ]
 
-                    predicted_animal = animal
-                    confidence = float(score)
-                    original_class = class_name
-                    break
-
-            if predicted_animal is not None:
-
-                st.success(
-                    f"🐾 Predicted Animal: {predicted_animal}"
-                )
+                percentage = value.item() * 100
 
                 st.write(
-                    f"AI classification: **{original_class}**"
-                )
-
-                st.write(
-                    f"Confidence: **{confidence * 100:.2f}%**"
-                )
-
-                display_animal_info(
-                    predicted_animal
-                )
-
-            else:
-
-                st.warning(
-                    "❓ The AI could not confidently identify "
-                    "this image as one of the supported animals."
-                )
-
-                st.write(
-                    "Please try a clear photograph where the animal "
-                    "is clearly visible."
-) 
+                    f"{animals[animal]['emoji']} "
+                    f"**{animal}** — "
+                    f"{percentage:.2f}%"
+    )
