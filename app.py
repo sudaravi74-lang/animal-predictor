@@ -383,7 +383,7 @@ def identify_organism_cached(
 # It runs only when the user presses "More Information".
 # =========================================================
 
- def generate_species_information(
+def generate_species_information(
     common_name,
     scientific_name,
     organism_type
