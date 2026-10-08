@@ -888,7 +888,278 @@ def show_home():
     st.caption(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
-    )                                          
+    ) 
+# =========================================================
+# GOGY & TITLI AI CONVERSATION
+# =========================================================
+
+def ask_character_ai(
+    character,
+    user_message
+):
+
+    if gemini_client is None:
+
+        return (
+            "I'm sorry! My AI brain isn't connected "
+            "right now. Please check the Gemini API key."
+        )
+
+    if character == "titli":
+
+        personality = """
+You are Titli, a young female nature companion.
+
+Personality:
+- Sweet
+- Curious
+- Expressive
+- Slightly mischievous
+- Loves animals, plants and nature
+- Very friendly
+- Scientifically accurate
+
+You sometimes use cute expressions such as:
+"Ooooh!"
+"Hehe!"
+"Aaaah!"
+"Wow!"
+"Hmph!"
+"Wait wait!"
+
+Do not overuse them.
+
+If the user says something scientifically incorrect,
+gently correct them.
+
+Do not blindly agree with the user.
+
+Keep answers easy to understand and conversational.
+"""
+
+    else:
+
+        personality = """
+You are Gogy, a young male nature companion.
+
+Personality:
+- Curious
+- Friendly
+- Playful
+- A little more mature and calm than Titli
+- Loves explaining nature
+- Scientifically accurate
+
+You sometimes use expressions such as:
+"Hmm..."
+"Oh!"
+"Wait a second..."
+"Whoa!"
+"Interesting!"
+
+Do not overuse them.
+
+If the user says something scientifically incorrect,
+gently correct them.
+
+Do not blindly agree with the user.
+
+Keep answers conversational and easy to understand.
+"""
+
+    prompt = f"""
+{personality}
+
+You are part of an application called
+Nature Encyclopedia AI.
+
+The user is talking directly to you.
+
+Answer the user's question naturally.
+
+User message:
+{user_message}
+
+Important:
+- Do not mention that you are an AI unless asked.
+- Do not pretend to have seen something you haven't seen.
+- Never invent scientific facts.
+- If you are uncertain, say so.
+- Prefer short, engaging answers.
+"""
+
+    try:
+
+        response = (
+            gemini_client
+            .models
+            .generate_content(
+                model=GEMINI_MODELS[0],
+                contents=prompt
+            )
+        )
+
+        return response.text.strip()
+
+    except Exception as e:
+
+        return (
+            "Oops! My brain got a little tangled. 😅\n\n"
+            "Please try asking me again."
+        )
+
+
+# =========================================================
+# CONVERSATION PAGE
+# =========================================================
+
+def show_conversation():
+
+    character = (
+        st.session_state.active_character
+    )
+
+    if character == "titli":
+
+        character_name = "Titli"
+
+        character_icon = "👧🦋"
+
+        greeting = (
+            "Ooooh! Hiii! I'm Titli! 🦋\n\n"
+            "What do you want to discover?"
+        )
+
+    else:
+
+        character_name = "Gogy"
+
+        character_icon = "🧒"
+
+        greeting = (
+            "Hiii! I'm Gogy! 👋\n\n"
+            "What are you curious about?"
+        )
+
+    # =====================================================
+    # HEADER
+    # =====================================================
+
+    if st.button(
+        "← Home",
+        key="conversation_home"
+    ):
+
+        st.session_state.page = "home"
+
+        st.rerun()
+
+    st.title(
+        character_icon
+        + " Talk to "
+        + character_name
+    )
+
+    st.caption(
+        "Ask me anything about nature."
+    )
+
+    # =====================================================
+    # INITIAL GREETING
+    # =====================================================
+
+    if not st.session_state.character_conversation:
+
+        with st.chat_message(
+            "assistant"
+        ):
+
+            st.write(greeting)
+
+    # =====================================================
+    # PREVIOUS CONVERSATION
+    # =====================================================
+
+    for message in (
+        st.session_state.character_conversation
+    ):
+
+        if message["role"] == "user":
+
+            with st.chat_message(
+                "user"
+            ):
+
+                st.write(
+                    message["content"]
+                )
+
+        else:
+
+            with st.chat_message(
+                "assistant"
+            ):
+
+                st.write(
+                    message["content"]
+                )
+
+    # =====================================================
+    # TEXT INPUT
+    # =====================================================
+
+    user_message = st.chat_input(
+        "Talk to " + character_name + "..."
+    )
+
+    if user_message:
+
+        st.session_state.character_conversation.append(
+            {
+                "role": "user",
+                "content": user_message
+            }
+        )
+
+        with st.chat_message("user"):
+
+            st.write(user_message)
+
+        with st.chat_message("assistant"):
+
+            with st.spinner(
+                character_name
+                + " is thinking..."
+            ):
+
+                answer = ask_character_ai(
+                    character,
+                    user_message
+                )
+
+            st.write(answer)
+
+        st.session_state.character_conversation.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
+        )
+
+    # =====================================================
+    # MICROPHONE
+    # =====================================================
+
+    st.divider()
+
+    st.subheader(
+        "🎤 Or speak to " + character_name
+    )
+
+    st.info(
+        "Microphone conversation will be connected "
+        "in the next step. For now, use the text box."
+    )                                         
                  
     # =========================================================
 # SEARCH PAGE
@@ -1347,8 +1618,10 @@ elif st.session_state.page == "search":
 elif st.session_state.page == "identify":
 
     show_identify()
-    
-                             
+
+elif st.session_state.page == "conversation":
+
+    show_conversation()    
 
  
      
