@@ -32,7 +32,7 @@ defaults = {
     "selected_taxon": None,
     "selected_observations": [],
     "search_name": "",
-    "home_nature_image": None
+    "home_nature_image": None,
     # =====================================================
     # GOGY & TITLI AI
     # =====================================================
