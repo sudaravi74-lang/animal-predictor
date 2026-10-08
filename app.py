@@ -1,12 +1,22 @@
 import streamlit as st
 from sklearn.ensemble import RandomForestClassifier
 
-st.title("🐾 Animal Encyclopedia & Predictor")
-st.write("Explore animals or identify an unknown animal using measurements!")
+# Image model imports
+import tensorflow as tf
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.applications.mobilenet_v2 import (
+    preprocess_input,
+    decode_predictions
+)
 
-# -----------------------------
+
+st.title("🐾 Animal Encyclopedia & Predictor")
+st.write("Explore animals, identify an unknown animal using measurements, or upload an animal image!")
+
+
+# ============================================================
 # ANIMAL INFORMATION
-# -----------------------------
+# ============================================================
 
 animals = {
 
@@ -151,9 +161,10 @@ animals = {
     }
 }
 
-# -----------------------------
-# MACHINE LEARNING MODEL
-# -----------------------------
+
+# ============================================================
+# MACHINE LEARNING MODEL - MEASUREMENT PREDICTOR
+# ============================================================
 
 features = [
     [40,70,10,4], [50,80,20,4], [60,100,30,4],
@@ -188,18 +199,196 @@ model = RandomForestClassifier(
 
 model.fit(features, labels)
 
-# -----------------------------
+
+# ============================================================
+# IMAGE MODEL
+# ============================================================
+
+@st.cache_resource
+def load_image_model():
+    return MobileNetV2(
+        weights="imagenet"
+    )
+
+
+image_model = load_image_model()
+
+
+# ============================================================
+# IMAGE CLASS MAPPING
+# ============================================================
+
+dog_classes = {
+    "Rhodesian_ridgeback",
+    "Staffordshire_bullterrier",
+    "basenji",
+    "miniature_pinscher",
+    "dingo",
+    "golden_retriever",
+    "Labrador_retriever",
+    "German_shepherd",
+    "Siberian_husky",
+    "Doberman",
+    "Rottweiler",
+    "boxer",
+    "beagle",
+    "pug",
+    "Chihuahua",
+    "French_bulldog",
+    "Great_Dane",
+    "Saint_Bernard",
+    "malinois",
+    "Border_collie",
+    "collie",
+    "flat-coated_retriever",
+    "Afghan_hound",
+    "Saluki",
+    "whippet",
+    "Italian_greyhound",
+    "Ibizan_hound",
+    "Gordon_setter",
+    "Irish_setter",
+    "groenendael",
+    "African_hunting_dog"
+}
+
+cat_classes = {
+    "tabby",
+    "tiger_cat",
+    "Persian_cat",
+    "Siamese_cat",
+    "Egyptian_cat",
+    "Angora"
+}
+
+lion_classes = {
+    "lion"
+}
+
+tiger_classes = {
+    "tiger"
+}
+
+elephant_classes = {
+    "African_elephant",
+    "Indian_elephant",
+    "tusker"
+}
+
+horse_classes = {
+    "sorrel",
+    "horse_cart"
+}
+
+panda_classes = {
+    "giant_panda"
+}
+
+monkey_classes = {
+    "macaque",
+    "baboon",
+    "guenon",
+    "patas",
+    "proboscis_monkey"
+}
+
+zebra_classes = {
+    "zebra"
+}
+
+
+def convert_to_animal(class_name):
+
+    if class_name in dog_classes:
+        return "Dog"
+
+    if class_name in cat_classes:
+        return "Cat"
+
+    if class_name in lion_classes:
+        return "Lion"
+
+    if class_name in tiger_classes:
+        return "Tiger"
+
+    if class_name in elephant_classes:
+        return "Elephant"
+
+    if class_name in horse_classes:
+        return "Horse"
+
+    if class_name in panda_classes:
+        return "Panda"
+
+    if class_name in monkey_classes:
+        return "Monkey"
+
+    if class_name in zebra_classes:
+        return "Zebra"
+
+    return None
+
+
+# ============================================================
+# FUNCTION TO DISPLAY ANIMAL INFORMATION
+# ============================================================
+
+def display_animal_info(predicted_animal):
+
+    info = animals[predicted_animal]
+
+    st.header(
+        info["emoji"] + " " + predicted_animal
+    )
+
+    st.subheader("👀 Appearance")
+    st.write(info["appearance"])
+
+    st.subheader("🎨 Colour")
+    st.write(info["colour"])
+
+    st.subheader("🦴 Body & Legs")
+    st.write(info["body"])
+
+    st.subheader("📏 Size")
+    st.write(info["size"])
+
+    st.subheader("⚖️ Weight")
+    st.write(info["weight"])
+
+    st.subheader("🌍 Region")
+    st.write(info["region"])
+
+    st.subheader("🌿 Habitat")
+    st.write(info["habitat"])
+
+    st.subheader("🍃 Diet")
+    st.write(info["diet"])
+
+    st.subheader("⏳ Lifespan")
+    st.write(info["lifespan"])
+
+    st.subheader("💡 Interesting Fact")
+    st.write(info["fact"])
+
+
+# ============================================================
 # APP OPTIONS
-# -----------------------------
+# ============================================================
 
 option = st.radio(
     "What would you like to do?",
-    ["📚 Explore Animal", "🤖 Identify Unknown Animal"]
+    [
+        "📚 Explore Animal",
+        "🤖 Identify Unknown Animal",
+        "📷 Identify Animal from Image"
+    ]
 )
 
-# -----------------------------
+
+# ============================================================
 # EXPLORE ANIMAL
-# -----------------------------
+# ============================================================
 
 if option == "📚 Explore Animal":
 
@@ -218,43 +407,14 @@ if option == "📚 Explore Animal":
                 caption="Giant Panda"
             )
 
-        st.header(info["emoji"] + " " + animal)
+        display_animal_info(animal)
 
-        st.subheader("👀 Appearance")
-        st.write(info["appearance"])
 
-        st.subheader("🎨 Colour")
-        st.write(info["colour"])
+# ============================================================
+# IDENTIFY UNKNOWN ANIMAL USING MEASUREMENTS
+# ============================================================
 
-        st.subheader("🦴 Body & Legs")
-        st.write(info["body"])
-
-        st.subheader("📏 Size")
-        st.write(info["size"])
-
-        st.subheader("⚖️ Weight")
-        st.write(info["weight"])
-
-        st.subheader("🌍 Region")
-        st.write(info["region"])
-
-        st.subheader("🌿 Habitat")
-        st.write(info["habitat"])
-
-        st.subheader("🍃 Diet")
-        st.write(info["diet"])
-
-        st.subheader("⏳ Lifespan")
-        st.write(info["lifespan"])
-
-        st.subheader("💡 Interesting Fact")
-        st.write(info["fact"])
-
-# -----------------------------
-# IDENTIFY UNKNOWN ANIMAL
-# -----------------------------
-
-else:
+elif option == "🤖 Identify Unknown Animal":
 
     st.header("🤖 Identify an Unknown Animal")
 
@@ -298,38 +458,107 @@ else:
             "🐾 Predicted Animal: " + predicted_animal
         )
 
-        info = animals[predicted_animal]
+        display_animal_info(predicted_animal)
 
-        st.header(
-            info["emoji"] + " " + predicted_animal
+
+# ============================================================
+# IDENTIFY ANIMAL FROM IMAGE
+# ============================================================
+
+else:
+
+    st.header("📷 Identify Animal from Image")
+
+    st.write(
+        "Upload a clear animal photograph and the AI will try to identify it."
+    )
+
+    uploaded_image = st.file_uploader(
+        "Choose an animal image",
+        type=["jpg", "jpeg", "png"]
+    )
+
+    if uploaded_image is not None:
+
+        st.image(
+            uploaded_image,
+            caption="Uploaded Image",
+            use_container_width=True
         )
 
-        st.subheader("👀 Appearance")
-        st.write(info["appearance"])
+        if st.button("🔍 Identify Animal"):
 
-        st.subheader("🎨 Colour")
-        st.write(info["colour"])
+            with st.spinner("🔎 Analyzing the image..."):
 
-        st.subheader("🦴 Body & Legs")
-        st.write(info["body"])
+                img = tf.keras.utils.load_img(
+                    uploaded_image,
+                    target_size=(224, 224)
+                )
 
-        st.subheader("📏 Size")
-        st.write(info["size"])
+                img_array = tf.keras.utils.img_to_array(img)
 
-        st.subheader("⚖️ Weight")
-        st.write(info["weight"])
+                img_array = tf.expand_dims(
+                    img_array,
+                    0
+                )
 
-        st.subheader("🌍 Region")
-        st.write(info["region"])
+                img_array = preprocess_input(
+                    img_array
+                )
 
-        st.subheader("🌿 Habitat")
-        st.write(info["habitat"])
+                predictions = image_model.predict(
+                    img_array,
+                    verbose=0
+                )
 
-        st.subheader("🍃 Diet")
-        st.write(info["diet"])
+                results = decode_predictions(
+                    predictions,
+                    top=5
+                )[0]
 
-        st.subheader("⏳ Lifespan")
-        st.write(info["lifespan"])
+            predicted_animal = None
+            confidence = 0
+            original_class = None
 
-        st.subheader("💡 Interesting Fact")
-        st.write(info["fact"])
+            for _, class_name, score in results:
+
+                animal = convert_to_animal(
+                    class_name
+                )
+
+                if animal is not None:
+
+                    predicted_animal = animal
+                    confidence = float(score)
+                    original_class = class_name
+                    break
+
+            if predicted_animal is not None:
+
+                st.success(
+                    f"🐾 Predicted Animal: {predicted_animal}"
+                )
+
+                st.write(
+                    f"AI classification: **{original_class}**"
+                )
+
+                st.write(
+                    f"Confidence: **{confidence * 100:.2f}%**"
+                )
+
+                display_animal_info(
+                    predicted_animal
+                )
+
+            else:
+
+                st.warning(
+                    "❓ The AI could not confidently identify "
+                    "this image as one of the supported animals."
+                )
+
+                st.write(
+                    "Please try a clear photograph where the animal "
+                    "is clearly visible."
+) 
