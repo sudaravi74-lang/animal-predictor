@@ -748,7 +748,6 @@ if observations:
     # =====================================================
     # iNATURALIST SOURCE
     # =====================================================
-taxon_id = (
         taxon.get("id")
     )
   if taxon_id:
@@ -763,6 +762,7 @@ taxon_id = (
             f"🔗 [View this taxon on iNaturalist]"
             f"({inat_url})"
         )
+
     
 
 
