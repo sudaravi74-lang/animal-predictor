@@ -1614,21 +1614,24 @@ def show_conversation():
         st.session_state.active_character
     )
 
-# =====================================================
-# USE THE ACTIVE CHARACTER'S OWN CHAT HISTORY
-# =====================================================
 
-if character == "titli":
-    conversation_key = "titli_conversation"
-else:
-    conversation_key = "gogy_conversation"
+    # =====================================================
+    # USE THE ACTIVE CHARACTER'S OWN CHAT HISTORY
+    # =====================================================
 
-conversation_history = st.session_state[conversation_key]
-    
- if character == "titli":
+    if character == "titli":
+        conversation_key = "titli_conversation"
+    else:
+        conversation_key = "gogy_conversation"
 
+    conversation_history = st.session_state[conversation_key]
+
+    # =====================================================
+    # CHARACTER DETAILS AND GREETINGS
+    # =====================================================
+
+    if character == "titli":
         character_name = "Titli"
-
         character_icon = "👧🦋"
 
         greeting = (
@@ -1637,15 +1640,15 @@ conversation_history = st.session_state[conversation_key]
         )
 
     else:
-
         character_name = "Gogy"
 
-        character_icon = "🧒"
+        character_icon = "👦"
 
         greeting = (
             "Hiii! I'm Gogy! 👋\n\n"
             "What are you curious about?"
         )
+        
 
     # =====================================================
     # HOME BUTTON
