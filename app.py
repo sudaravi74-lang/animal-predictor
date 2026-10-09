@@ -81,16 +81,16 @@ HEADERS = {
 }
 
 
-# =========================================================
+
+# ==========================================
 # iNATURALIST TAXON SEARCH
-# =========================================================
+# ==========================================
 
 @st.cache_data(
     ttl=3600,
     show_spinner=False
 )
 def search_taxon_cached(search_name):
-
     try:
         response = requests.get(
             INAT_TAXA_URL,
@@ -109,44 +109,95 @@ def search_taxon_cached(search_name):
             []
         )
 
-        
-            if not results:
-                return None
+        if not results:
+            return None
 
-            # SEARCH FIX: Match singular and plural organism names.
-            def normalize_name(value):
-                words = (value or "").lower().replace("-", " ").split()
+        # SEARCH FIX: Match common singular/plural forms.
+        def normalize_name(value):
+            words = (
+                (value or "")
+                .lower()
+                .replace("-", " ")
+                .split()
+            )
 
-                # Handle irregular plurals.
-                irregular = {
-                    "mice": "mouse",
-                    "rats": "rat",
-                    "hamsters": "hamster",
-                    "butterflies": "butterfly",
-                    "flies": "fly",
-                    "wolves": "wolf",
-                    "geese": "goose",
-                    "deer": "deer",
-                    "sheep": "sheep",
+            irregular = {
+                "mice": "mouse",
+                "rats": "rat",
+                "hamsters": "hamster",
+                "butterflies": "butterfly",
+                "flies": "fly",
+                "wolves": "wolf",
+                "geese": "goose",
+                "deer": "deer",
+                "sheep": "sheep",
+            }
+
+            normalized = []
+
+            for word in words:
+                if word in irregular:
+                    word = irregular[word]
+                elif len(word) > 4 and word.endswith("ies"):
+                    word = word[:-3] + "y"
+                elif (
+                    len(word) > 3
+                    and word.endswith("s")
+                    and not word.endswith("ss")
+                ):
+                    word = word[:-1]
+
+                normalized.append(word)
+
+            return " ".join(normalized)
+
+        # Normalize the user's search.
+        search_normalized = normalize_name(search_name)
+        search_words = set(search_normalized.split())
+
+        # Find the best matching organism.
+        best_match = None
+        best_score = 0
+
+        for taxon in results:
+            common_name = normalize_name(
+                taxon.get("preferred_common_name")
+            )
+            scientific_name = normalize_name(
+                taxon.get("name")
+            )
+
+            # Exact normalized match comes first.
+            if (
+                common_name == search_normalized
+                or scientific_name == search_normalized
+            ):
+                return taxon
+
+            # Match search words within organism names.
+            common_words = set(common_name.split())
+            scientific_words = set(scientific_name.split())
+
+            score = (
+                len(search_words & common_words) * 3
+                + len(search_words & scientific_words)
+            )
+
+            if score > best_score:
+                best_score = score
+                best_match = taxon
+
+        # Do not return an unrelated organism.
+        if best_score > 0:
+            return best_match
+
+        return None
+
+    except Exception as e:
+        return {
+            "error": str(e)
                 }
-
-                normalized = []
-
-                for word in words:
-                    if word in irregular:
-                        word = irregular[word]
-                    elif len(word) > 4 and word.endswith("ies"):
-                        word = word[:-3] + "y"
-                    elif (
-                        len(word) > 3
-                        and word.endswith("s")
-                        and not word.endswith("ss")
-                    ):
-                        word = word[:-1]
-
-                    normalized.append(word)
-
-                return " ".join(normalized)
+        
 
             # Normalize the user's search.
             search_normalized = normalize_name(search_name)
