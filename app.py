@@ -1440,11 +1440,17 @@ def show_conversation():
                     message["content"]
                 )
 
+        # =====================================================
+    # 🎙️ VOICE INPUT + TEXT INPUT
     # =====================================================
-    # TEXT INPUT
+
+    voice_input_test()
+
     # =====================================================
-voice_input_test()
-user_message = st.chat_input(
+    # ✍️ NORMAL TEXT INPUT
+    # =====================================================
+
+    user_message = st.chat_input(
         "Talk to "
         + character_name
         + "..."
