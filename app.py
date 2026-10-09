@@ -1625,7 +1625,7 @@ else:
 
 conversation_history = st.session_state[conversation_key]
     
-    if character == "titli":
+ if character == "titli":
 
         character_name = "Titli"
 
