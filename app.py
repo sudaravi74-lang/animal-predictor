@@ -183,9 +183,7 @@ def get_observations_cached(taxon_id):
     except Exception:
 
         return []
-
-
-# =========================================================
+        # =========================================================
 # LARGE PHOTO URL
 # =========================================================
 
@@ -433,9 +431,7 @@ def determine_organism_type(
     if major_group == "animalia":
         return "animal"
 
-    return "organism"
-
-# =========================================================
+    return "organism"# =========================================================
 # SPECIES PAGE
 # =========================================================
 
@@ -1339,8 +1335,7 @@ def voice_input_test():
     )
 
     return voice_text
-
-# =========================================================
+                # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
@@ -1612,11 +1607,20 @@ Now reply naturally as {character.capitalize()}.
 def show_conversation():
     # -----------------------------------------------------
     # 1. Resolve the active character safely
+    # Define a safe display name immediately so no UI line can
+    # reference character_name before it has been assigned.
     # -----------------------------------------------------
     character = st.session_state.get("active_character", "gogy")
     if character not in ("gogy", "titli"):
         character = "gogy"
-        st.session_state.active_character = character
+    st.session_state.active_character = character
+    character_name = "Titli" if character == "titli" else "Gogy"
+    character_icon = "👧🦋" if character == "titli" else "👦"
+    greeting = (
+        "Ooooh! Hiii! I'm Titli! 🦋\n\nWhat do you want to discover?"
+        if character == "titli"
+        else "Hiii! I'm Gogy! 👋\n\nWhat are you curious about?"
+    )
 
     # Keep history and retry state separate for each character.
     conversation_key = f"{character}_conversation"
@@ -1629,23 +1633,7 @@ def show_conversation():
 
     conversation_history = st.session_state[conversation_key]
 
-    # -----------------------------------------------------
-    # 2. Character details — define before using them
-    # -----------------------------------------------------
-    if character == "titli":
-        character_name = "Titli"
-        character_icon = "👧🦋"
-        greeting = (
-            "Ooooh! Hiii! I'm Titli! 🦋\n\n"
-            "What do you want to discover?"
-        )
-    else:
-        character_name = "Gogy"
-        character_icon = "👦"
-        greeting = (
-            "Hiii! I'm Gogy! 👋\n\n"
-            "What are you curious about?"
-        )
+    # Character display details were assigned safely at the top of this function.
 
     # -----------------------------------------------------
     # 3. Navigation and character header
@@ -1806,8 +1794,7 @@ def show_conversation():
 
                     # Refresh to render the saved answer in chat history.
                     st.rerun()
-
-    # -----------------------------------------------------
+        # -----------------------------------------------------
     # 8. Voice settings
     # -----------------------------------------------------
     st.divider()
@@ -2352,5 +2339,4 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 
 # Render the selected page.
 page_function()
-
-
+        
