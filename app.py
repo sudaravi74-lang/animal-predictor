@@ -109,36 +109,87 @@ def search_taxon_cached(search_name):
             []
         )
 
-        if not results:
-            return None
+        
+            if not results:
+                return None
 
-        search_lower = (
-            search_name.strip().lower()
-        )
+            # SEARCH FIX: Match singular and plural organism names.
+            def normalize_name(value):
+                words = (value or "").lower().replace("-", " ").split()
 
-        # Exact common/scientific name
-        for taxon in results:
+                # Handle irregular plurals.
+                irregular = {
+                    "mice": "mouse",
+                    "rats": "rat",
+                    "hamsters": "hamster",
+                    "butterflies": "butterfly",
+                    "flies": "fly",
+                    "wolves": "wolf",
+                    "geese": "goose",
+                    "deer": "deer",
+                    "sheep": "sheep",
+                }
 
-            common_name = (
-                taxon.get(
-                    "preferred_common_name"
+                normalized = []
+
+                for word in words:
+                    if word in irregular:
+                        word = irregular[word]
+                    elif len(word) > 4 and word.endswith("ies"):
+                        word = word[:-3] + "y"
+                    elif (
+                        len(word) > 3
+                        and word.endswith("s")
+                        and not word.endswith("ss")
+                    ):
+                        word = word[:-1]
+
+                    normalized.append(word)
+
+                return " ".join(normalized)
+
+            # Normalize the user's search.
+            search_normalized = normalize_name(search_name)
+            search_words = set(search_normalized.split())
+
+            # Find the best matching organism.
+            best_match = None
+            best_score = 0
+
+            for taxon in results:
+                common_name = normalize_name(
+                    taxon.get("preferred_common_name")
                 )
-                or ""
-            ).lower()
+                scientific_name = normalize_name(
+                    taxon.get("name")
+                )
 
-            scientific_name = (
-                taxon.get("name")
-                or ""
-            ).lower()
+                # Exact normalized name gets priority.
+                if (
+                    common_name == search_normalized
+                    or scientific_name == search_normalized
+                ):
+                    return taxon
 
-            if (
-                common_name == search_lower
-                or scientific_name == search_lower
-            ):
-                return taxon
+                # Also match words within longer organism names.
+                common_words = set(common_name.split())
+                scientific_words = set(scientific_name.split())
 
-                  # Do not return an unrelated organism
-        return None
+                score = (
+                    len(search_words & common_words) * 3
+                    + len(search_words & scientific_words)
+                )
+
+                if score > best_score:
+                    best_score = score
+                    best_match = taxon
+
+            # Never return an unrelated organism.
+            if best_score > 0:
+                return best_match
+
+            return None
+                        
 
     except Exception as e:
 
