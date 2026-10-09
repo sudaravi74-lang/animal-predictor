@@ -995,92 +995,344 @@ def generate_character_voice(character, text):
 
     return None
 # =========================================================
-# 🎙️ VOICE INPUT TEST — MICROPHONE + MUSIC ANIMATION
+# 🎙️ REAL VOICE INPUT — SPEECH RECOGNITION
+# =========================================================
+#
+# This section connects:
+#
+# 🎙️ Microphone
+#      ↓
+# 🎵 Listening animation
+#      ↓
+# Browser speech recognition
+#      ↓
+# Text sent back to Python
+#
+# The existing Gemini + ElevenLabs system will use
+# this text later through a small hook in show_conversation().
+#
+# IMPORTANT:
+# This keeps the microphone UI and listening animation
+# inside the same voice component.
 # =========================================================
 
-import streamlit.components.v1 as components
+VOICE_INPUT_COMPONENT = st.components.v2.component(
+    name="nature_voice_input",
 
-def voice_input_test():
-    components.html("""
-    <style>
-        .voice-box {
-            text-align: center;
-            padding: 12px;
-        }
-
-        .mic {
-            width: 58px;
-            height: 58px;
-            border-radius: 50%;
-            border: none;
-            background: #222;
-            color: white;
-            font-size: 28px;
-            cursor: pointer;
-        }
-
-        .notes {
-            display: none;
-            font-size: 25px;
-            animation: float 1s infinite alternate;
-        }
-
-        .listening {
-            display: none;
-            margin-top: 8px;
-            font-size: 14px;
-        }
-
-        @keyframes float {
-            from { transform: translateY(5px); }
-            to   { transform: translateY(-8px); }
-        }
-    </style>
-
+    html="""
     <div class="voice-box">
-        <div id="notes" class="notes">🎵 ♪ ♫ ♪ 🎵</div>
 
-        <button id="mic" class="mic">🎙️</button>
+        <div id="notes" class="notes">
+            🎵 ♪ ♫ ♪ 🎵
+        </div>
+
+        <button id="mic" class="mic">
+            🎙️
+        </button>
 
         <div id="listening" class="listening">
             Listening...
         </div>
+
+        <div id="voice-status" class="voice-status"></div>
+
     </div>
+    """,
 
-    <script>
-        const mic = document.getElementById("mic");
-        const notes = document.getElementById("notes");
-        const listening = document.getElementById("listening");
+    css="""
+    .voice-box {
+        text-align: center;
+        padding: 8px;
+    }
 
+    .mic {
+        width: 58px;
+        height: 58px;
+        border-radius: 50%;
+        border: none;
+        background: #222;
+        color: white;
+        font-size: 28px;
+        cursor: pointer;
+    }
+
+    .mic:active {
+        transform: scale(0.95);
+    }
+
+    .notes {
+        display: none;
+        font-size: 25px;
+        animation: float 1s infinite alternate;
+        margin-bottom: 4px;
+    }
+
+    .listening {
+        display: none;
+        margin-top: 8px;
+        font-size: 14px;
+    }
+
+    .voice-status {
+        margin-top: 6px;
+        font-size: 12px;
+    }
+
+    @keyframes float {
+        from {
+            transform: translateY(5px);
+        }
+
+        to {
+            transform: translateY(-8px);
+        }
+    }
+    """,
+
+    js="""
+    export default function(component) {
+
+        const {
+            parentElement,
+            setTriggerValue
+        } = component;
+
+        const mic =
+            parentElement.querySelector("#mic");
+
+        const notes =
+            parentElement.querySelector("#notes");
+
+        const listening =
+            parentElement.querySelector("#listening");
+
+        const status =
+            parentElement.querySelector("#voice-status");
+
+
+        // ---------------------------------------------
+        // Browser Speech Recognition
+        // ---------------------------------------------
+
+        const SpeechRecognition =
+            window.SpeechRecognition ||
+            window.webkitSpeechRecognition;
+
+
+        let recognition = null;
         let active = false;
 
-        mic.onclick = async () => {
 
-            active = !active;
+        // ---------------------------------------------
+        // Browser support check
+        // ---------------------------------------------
+
+        if (!SpeechRecognition) {
+
+            mic.disabled = true;
+
+            status.textContent =
+                "Voice input is not supported in this browser.";
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // Create speech recognition
+        // ---------------------------------------------
+
+        recognition = new SpeechRecognition();
+
+        recognition.lang = "en-IN";
+
+        recognition.continuous = false;
+
+        recognition.interimResults = false;
+
+
+        // ---------------------------------------------
+        // MICROPHONE BUTTON
+        // ---------------------------------------------
+
+        mic.onclick = () => {
 
             if (active) {
 
-                try {
-                    await navigator.mediaDevices.getUserMedia({
-                        audio: true
-                    });
+                recognition.stop();
 
-                    notes.style.display = "block";
-                    listening.style.display = "block";
+                return;
+            }
 
-                } catch (error) {
-                    alert("Microphone permission is required.");
-                    active = false;
+
+            try {
+
+                active = true;
+
+                notes.style.display = "block";
+
+                listening.style.display = "block";
+
+                status.textContent = "";
+
+
+                recognition.start();
+
+            } catch (error) {
+
+                active = false;
+
+                notes.style.display = "none";
+
+                listening.style.display = "none";
+
+                status.textContent =
+                    "Could not start microphone.";
+
+            }
+        };
+
+
+        // ---------------------------------------------
+        // SPEECH RESULT
+        // ---------------------------------------------
+
+        recognition.onresult = (event) => {
+
+            let transcript = "";
+
+            for (
+                let i = event.resultIndex;
+                i < event.results.length;
+                i++
+            ) {
+
+                if (
+                    event.results[i].isFinal
+                ) {
+
+                    transcript +=
+                        event.results[i][0].transcript;
                 }
+            }
+
+
+            transcript =
+                transcript.trim();
+
+
+            if (transcript) {
+
+                // Send completed speech to Python.
+                //
+                // This is a one-time trigger,
+                // so the same sentence will not
+                // remain permanently in the component.
+
+                setTriggerValue(
+                    "speech",
+                    transcript
+                );
+            }
+        };
+
+
+        // ---------------------------------------------
+        // RECOGNITION ENDED
+        // ---------------------------------------------
+
+        recognition.onend = () => {
+
+            active = false;
+
+            notes.style.display = "none";
+
+            listening.style.display = "none";
+        };
+
+
+        // ---------------------------------------------
+        // RECOGNITION ERROR
+        // ---------------------------------------------
+
+        recognition.onerror = (event) => {
+
+            active = false;
+
+            notes.style.display = "none";
+
+            listening.style.display = "none";
+
+
+            if (
+                event.error === "not-allowed"
+            ) {
+
+                status.textContent =
+                    "Microphone permission is required.";
+
+            } else if (
+                event.error === "no-speech"
+            ) {
+
+                status.textContent =
+                    "I couldn't hear anything.";
 
             } else {
 
-                notes.style.display = "none";
-                listening.style.display = "none";
+                status.textContent =
+                    "Voice input error.";
             }
         };
-    </script>
-    """, height=125)
+
+
+        // ---------------------------------------------
+        // CLEANUP
+        // ---------------------------------------------
+
+        return () => {
+
+            if (recognition) {
+
+                recognition.onresult = null;
+
+                recognition.onend = null;
+
+                recognition.onerror = null;
+
+                try {
+                    recognition.stop();
+                } catch (e) {}
+            }
+        };
+    }
+    """
+)
+
+
+def voice_input_test():
+    """
+    🎙️ Voice input component.
+
+    The browser listens to the user's speech and sends
+    the completed sentence back to Python.
+
+    The actual Gemini conversation is NOT changed here.
+    """
+
+    result = VOICE_INPUT_COMPONENT(
+        key="nature_voice_input",
+        on_speech_change=lambda: None
+    )
+
+    voice_text = getattr(
+        result,
+        "speech",
+        None
+    )
+
+    return voice_text
+
 # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
@@ -1440,21 +1692,22 @@ def show_conversation():
                     message["content"]
                 )
 
-        # =====================================================
-    # 🎙️ VOICE INPUT + TEXT INPUT
+             # =====================================================
+    # TEXT INPUT + VOICE INPUT
     # =====================================================
 
-    voice_input_test()
-
-    # =====================================================
-    # ✍️ NORMAL TEXT INPUT
-    # =====================================================
+    voice_text = voice_input_test()
 
     user_message = st.chat_input(
         "Talk to "
         + character_name
         + "..."
     )
+
+    # If voice input was used, send the recognized
+    # speech through the same existing AI system.
+    if not user_message and voice_text:
+        user_message = voice_text
 
     if user_message:
 
