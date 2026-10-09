@@ -1718,7 +1718,13 @@ def show_conversation():
 # TEXT INPUT + VOICE INPUT + RETRY SUPPORT
 # =====================================================
 
-voice_text = voice_input_test()
+
+ 
+    # FIX: DEFINE ACTIVE CHARACTER NAME BEFORE CHAT INPUT
+    character = st.session_state.active_character
+    character_name = "Titli" if character == "titli" else "Gogy"
+    voice_text = voice_input_test()
+
 
 user_message = st.chat_input(
     "Talk to " + character_name + "..."
