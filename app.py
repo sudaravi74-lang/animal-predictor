@@ -2284,6 +2284,51 @@ def show_identify():
 
 
 # =========================================================
+# ☰ GLOBAL SIDEBAR NAVIGATION
+# Available on every page of the app
+# =========================================================
+
+def show_sidebar():
+
+    with st.sidebar:
+
+        st.title("🌍 Nature AI")
+        st.caption("Where would you like to go?")
+
+        st.divider()
+
+        # 🏠 HOME
+        if st.button("🏠 Home", use_container_width=True):
+            st.session_state.page = "home"
+            st.rerun()
+
+        # 🧒 GOGY
+        if st.button("🧒 Talk to Gogy", use_container_width=True):
+            st.session_state.active_character = "gogy"
+            st.session_state.page = "conversation"
+            st.rerun()
+
+        # 🦋 TITLI
+        if st.button("🦋 Talk to Titli", use_container_width=True):
+            st.session_state.active_character = "titli"
+            st.session_state.page = "conversation"
+            st.rerun()
+
+        # 🔎 SEARCH ORGANISM
+        if st.button("🔎 Search Organism", use_container_width=True):
+            st.session_state.page = "search"
+            st.rerun()
+
+        # 📸 IDENTIFY FROM PHOTO
+        if st.button("📸 Identify from Photo", use_container_width=True):
+            st.session_state.page = "identify"
+            st.rerun()
+            # =========================================================
+# SHOW SIDEBAR BEFORE OPENING ANY PAGE
+# =========================================================
+
+show_sidebar()
+# =========================================================
 # APP ROUTER
 # =========================================================
 
