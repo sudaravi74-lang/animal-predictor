@@ -1444,7 +1444,7 @@ def show_conversation():
     # TEXT INPUT
     # =====================================================
 voice_input_test()
-    user_message = st.chat_input(
+user_message = st.chat_input(
         "Talk to "
         + character_name
         + "..."
