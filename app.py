@@ -10,8 +10,6 @@ from PIL import Image
 from google import genai
 # SUPABASE DATABASE DRIVER
 import psycopg2
-# ElevenLabs text-to-speech / voice cloning connection
-ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 
 
 # =========================================================
@@ -464,6 +462,8 @@ GEMINI_MODELS = [
     "gemini-3.7-flash",
     "gemini-3.6-flash"
 ]
+
+
 # =========================================================
 # GEMINI IMAGE IDENTIFICATION
 # =========================================================
@@ -609,10 +609,7 @@ def identify_organism_cached(
         "success": False,
         "error": "\n\n".join(errors),
         "model": None
-    }
-
-
-# =========================================================
+        }# =========================================================
 # ORGANISM TYPE
 # =========================================================
 
@@ -1167,60 +1164,71 @@ def clear_character_audio():
     st.session_state.audio_character = None
 # =========================================================
 # CHARACTER VOICE GENERATORS
+# Paid TTS was replaced by the free browser speech function below.
+# Keep this section marker so the surrounding app structure stays clear.
 # =========================================================
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def generate_elevenlabs_voice(text, voice_id, api_key):
-    """Generate MP3 speech from an ElevenLabs cloned voice."""
-    if not text or not voice_id or not api_key:
-        return None
-
-    response = requests.post(
-        f"{ELEVENLABS_API_URL}/{voice_id}",
-        params={"output_format": "mp3_44100_128"},
-        headers={
-            "xi-api-key": api_key,
-            "Content-Type": "application/json",
-        },
-        json={
-            "text": text,
-            "model_id": "eleven_multilingual_v2",
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    return response.content
-
-
-def generate_gogy_voice(text):
-    """Generate speech using the cloned Gogy voice."""
-    api_key = st.secrets.get("ELEVENLABS_API_KEY", "")
-    voice_id = st.secrets.get("GOGY_VOICE_ID", "")
-    return generate_elevenlabs_voice(text, voice_id, api_key)
-
-
-def generate_titli_voice(text):
-    """Generate speech using the cloned Titli voice."""
-    api_key = st.secrets.get("ELEVENLABS_API_KEY", "")
-    voice_id = st.secrets.get("TITLI_VOICE_ID", "")
-    return generate_elevenlabs_voice(text, voice_id, api_key)
-
-
-def generate_character_voice(character, text):
-    if not text:
-        return None
-
-    try:
-        if character == "gogy":
-            return generate_gogy_voice(text)
-        if character == "titli":
-            return generate_titli_voice(text)
-    except Exception as e:
-        st.session_state.audio_error = str(e)
-        return None
-
-    return None
 # =========================================================
+# FREE BUILT-IN BROWSER SPEECH — NO API KEY OR CREDITS
+# Uses the browser/device speech voices for Hindi and English.
+# The selected browser voice may vary by device and installed languages.
+# =========================================================
+
+def speak_character_text(character, text):
+    """Speak text in the browser using built-in speech synthesis."""
+    if not text or not st.session_state.get("audio_enabled", True):
+        return
+
+    # JSON encoding safely escapes quotes/newlines before inserting text into JS.
+    text_json = json.dumps(str(text))
+    character_json = json.dumps(str(character))
+    html = f"""
+    <!doctype html><html><head><meta charset="utf-8"></head>
+    <body style="margin:0;font:12px sans-serif;color:#666">
+    <span id="speech-status">Preparing free voice…</span>
+    <script>
+    (() => {{
+      const text = {text_json};
+      const character = {character_json};
+      const status = document.getElementById('speech-status');
+      try {{
+        if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {{
+          status.textContent = 'This browser does not support built-in speech. Try Chrome.';
+          return;
+        }}
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        // Hindi text uses a Hindi voice when installed; otherwise use English.
+        const hasHindi = /[\\u0900-\\u097F]/.test(text);
+        utterance.lang = hasHindi ? 'hi-IN' : 'en-US';
+        // Give Goggy and Titli slightly different delivery where supported.
+        utterance.rate = character === 'titli' ? 1.02 : 0.96;
+        utterance.pitch = character === 'titli' ? 1.22 : 0.92;
+        let started = false;
+        const chooseVoice = () => {{
+          if (started) return;
+          const voices = window.speechSynthesis.getVoices() || [];
+          started = true;
+          const prefix = hasHindi ? 'hi' : 'en';
+          const matching = voices.find(v => (v.lang || '').toLowerCase().startsWith(prefix));
+          if (matching) utterance.voice = matching;
+          status.textContent = '🔊 ' + (character === 'titli' ? 'Titli' : 'Goggy') + ' speaking';
+          window.speechSynthesis.speak(utterance);
+        }};
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length) chooseVoice();
+        else {{
+          window.speechSynthesis.onvoiceschanged = chooseVoice;
+          // Some mobile browsers do not fire onvoiceschanged reliably.
+          setTimeout(() => {{ if (window.speechSynthesis.pending === false) chooseVoice(); }}, 250);
+        }}
+        utterance.onend = () => {{ status.textContent = 'Voice finished'; }};
+        utterance.onerror = () => {{ status.textContent = 'Voice unavailable; check device text-to-speech settings.'; }};
+      }} catch (e) {{ status.textContent = 'Built-in voice could not start. Try tapping Speak again.'; }}
+    }})();
+    </script></body></html>
+    """
+    st.components.v1.html(html, height=28, scrolling=False)# =========================================================
 # 🎙️ REAL VOICE INPUT — SPEECH RECOGNITION
 # =========================================================
 #
@@ -1557,7 +1565,8 @@ def voice_input_test():
         None
     )
 
-    return voice_text# =========================================================
+    return voice_text
+                # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
@@ -1883,9 +1892,7 @@ def show_conversation():
 
     conversation_history = st.session_state[conversation_key]
 
-    # Character display details were assigned safely at the top of this function.
-
-    # -----------------------------------------------------
+    # Character display details were assigned safely at the top of this function.# -----------------------------------------------------
     # 3. Navigation and character header
     # -----------------------------------------------------
     if st.button("← Home", key="conversation_home"):
@@ -2081,15 +2088,9 @@ def show_conversation():
                         if not auto_ok:
                             st.warning("Reply received, but updating the saved session failed: " + str(auto_error))
 
-                    # Voice errors must not break the text conversation.
+                    # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
                     if st.session_state.get("audio_enabled", True):
-                        try:
-                            audio = generate_character_voice(character, answer)
-                            if audio:
-                                prepare_audio(audio, character)
-                                play_character_audio()
-                        except Exception as exc:
-                            st.session_state["audio_error"] = str(exc)
+                        speak_character_text(character, answer)
 
             # Auto-save every new message/answer so a completed turn is persisted.
             if conversation_history:
@@ -2100,7 +2101,9 @@ def show_conversation():
                 if saved_ok:
                     st.session_state.current_chat_ids[character] = saved_id
                 else:
-                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))# -----------------------------------------------------
+                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
+
+    # -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -2151,17 +2154,9 @@ def show_conversation():
                     })
                     st.session_state[pending_key] = None
 
+                    # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
                     if st.session_state.get("audio_enabled", True):
-                        try:
-                            retry_audio = generate_character_voice(
-                                character,
-                                retry_answer
-                            )
-                            if retry_audio:
-                                prepare_audio(retry_audio, character)
-                                play_character_audio()
-                        except Exception as exc:
-                            st.session_state["audio_error"] = str(exc)
+                        speak_character_text(character, retry_answer)
 
                     # Persist the retry answer to Supabase before refreshing.
                     saved_ok, saved_id, saved_error = save_chat_to_supabase(
@@ -2239,14 +2234,8 @@ def show_voice_space():
             if character == "titli"
             else "Hiii! I'm Gogy! What would you like to know today?"
         )
-        try:
-            audio = generate_character_voice(character, greeting)
-            if audio:
-                st.audio(audio, format="audio/mp3", autoplay=True)
-            else:
-                st.info("The greeting voice isn't configured yet. Check the voice API settings.")
-        except Exception:
-            st.info("Voice greeting could not play right now. Check the voice API settings.")
+        # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
+        speak_character_text(character, greeting)
         st.session_state[greeting_key] = True
 
     voice_text = voice_input_test()
@@ -2259,14 +2248,8 @@ def show_voice_space():
         if answer:
             answer = str(answer).strip()
             history.append({"role": "assistant", "content": answer})
-            try:
-                audio = generate_character_voice(character, answer)
-                if audio:
-                    st.audio(audio, format="audio/mp3", autoplay=True)
-                else:
-                    st.warning("I couldn't generate speech. Check the ElevenLabs voice settings.")
-            except Exception:
-                st.warning("I couldn't play the spoken reply. You can return to chat mode.")
+            # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
+            speak_character_text(character, answer)
             active_id = st.session_state.current_chat_ids.get(character)
             if active_id:
                 ok, _, err = save_chat_to_supabase(
@@ -2324,9 +2307,7 @@ def show_search():
         submitted = st.form_submit_button(
             "🔎 Search",
             use_container_width=True
-        )
-
-    # =====================================================
+        )# =====================================================
     # SEARCH
     # =====================================================
 
@@ -2486,7 +2467,9 @@ def show_identify():
 
             st.session_state.selected_taxon = None
 
-            st.session_state.selected_observations = []# =====================================================
+            st.session_state.selected_observations = []
+
+    # =====================================================
     # DISPLAY IMAGE
     # =====================================================
 
@@ -2812,7 +2795,4 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 # Render the selected page.
 page_function()
 
-        
-
     
-      
