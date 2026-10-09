@@ -1720,10 +1720,12 @@ def show_conversation():
 
 
  
-    # FIX: DEFINE ACTIVE CHARACTER NAME BEFORE CHAT INPUT
-    character = st.session_state.active_character
+     
+    # FIX: DEFINE CHARACTER NAME SAFELY
+    character = st.session_state.get("active_character", "gogy")
     character_name = "Titli" if character == "titli" else "Gogy"
     voice_text = voice_input_test()
+
 
 
 user_message = st.chat_input(
