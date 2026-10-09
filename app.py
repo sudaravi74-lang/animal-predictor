@@ -82,6 +82,7 @@ HEADERS = {
 
 
 
+ 
 # ==========================================
 # iNATURALIST TAXON SEARCH
 # ==========================================
@@ -95,7 +96,7 @@ def search_taxon_cached(search_name):
         response = requests.get(
             INAT_TAXA_URL,
             params={
-                "q": search_name,
+                "q": search_name.strip(),
                 "per_page": 10
             },
             headers=HEADERS,
@@ -104,15 +105,12 @@ def search_taxon_cached(search_name):
 
         response.raise_for_status()
 
-        results = response.json().get(
-            "results",
-            []
-        )
+        results = response.json().get("results", [])
 
         if not results:
             return None
 
-        # SEARCH FIX: Match common singular/plural forms.
+        # SEARCH FIX: Normalize singular and plural names.
         def normalize_name(value):
             words = (
                 (value or "")
@@ -123,12 +121,19 @@ def search_taxon_cached(search_name):
 
             irregular = {
                 "mice": "mouse",
+                "mouse": "mouse",
                 "rats": "rat",
+                "rat": "rat",
                 "hamsters": "hamster",
+                "hamster": "hamster",
                 "butterflies": "butterfly",
+                "butterfly": "butterfly",
                 "flies": "fly",
+                "fly": "fly",
                 "wolves": "wolf",
+                "wolf": "wolf",
                 "geese": "goose",
+                "goose": "goose",
                 "deer": "deer",
                 "sheep": "sheep",
             }
@@ -155,7 +160,7 @@ def search_taxon_cached(search_name):
         search_normalized = normalize_name(search_name)
         search_words = set(search_normalized.split())
 
-        # Find the best matching organism.
+        # SEARCH FIX: Find the closest relevant organism.
         best_match = None
         best_score = 0
 
@@ -163,18 +168,19 @@ def search_taxon_cached(search_name):
             common_name = normalize_name(
                 taxon.get("preferred_common_name")
             )
+
             scientific_name = normalize_name(
                 taxon.get("name")
             )
 
-            # Exact normalized match comes first.
+            # Exact match has the highest priority.
             if (
                 common_name == search_normalized
                 or scientific_name == search_normalized
             ):
                 return taxon
 
-            # Match search words within organism names.
+            # Match words in the organism's names.
             common_words = set(common_name.split())
             scientific_words = set(scientific_name.split())
 
@@ -187,7 +193,7 @@ def search_taxon_cached(search_name):
                 best_score = score
                 best_match = taxon
 
-        # Do not return an unrelated organism.
+        # Do not show an unrelated organism.
         if best_score > 0:
             return best_match
 
@@ -196,58 +202,7 @@ def search_taxon_cached(search_name):
     except Exception as e:
         return {
             "error": str(e)
-                }
-        
-
-            # Normalize the user's search.
-            search_normalized = normalize_name(search_name)
-            search_words = set(search_normalized.split())
-
-            # Find the best matching organism.
-            best_match = None
-            best_score = 0
-
-            for taxon in results:
-                common_name = normalize_name(
-                    taxon.get("preferred_common_name")
-                )
-                scientific_name = normalize_name(
-                    taxon.get("name")
-                )
-
-                # Exact normalized name gets priority.
-                if (
-                    common_name == search_normalized
-                    or scientific_name == search_normalized
-                ):
-                    return taxon
-
-                # Also match words within longer organism names.
-                common_words = set(common_name.split())
-                scientific_words = set(scientific_name.split())
-
-                score = (
-                    len(search_words & common_words) * 3
-                    + len(search_words & scientific_words)
-                )
-
-                if score > best_score:
-                    best_score = score
-                    best_match = taxon
-
-            # Never return an unrelated organism.
-            if best_score > 0:
-                return best_match
-
-            return None
-                        
-
-    except Exception as e:
-
-        return {
-            "error": str(e)
         }
-
 
 # =========================================================
 # iNATURALIST OBSERVATIONS
