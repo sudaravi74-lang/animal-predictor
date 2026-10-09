@@ -7,7 +7,8 @@ import time
 from io import BytesIO
 from PIL import Image
 from google import genai
-
+# SUPABASE DATABASE DRIVER
+import psycopg2
 # ElevenLabs text-to-speech / voice cloning connection
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 
@@ -22,7 +23,37 @@ st.set_page_config(
     layout="wide"
 )
 
+# =========================================================
+# SUPABASE CONNECTION TEST - TEMPORARY
+# ========================================================= 
 
+try:
+# Read the private database URL from Streamlit Secrets
+db_url = st.secrets["SUPABASE_DB_URL"]
+
+# Open a secure connection to Supabase
+test_connection = psycopg2.connect(
+    db_url,
+    connect_timeout=10,
+    sslmode="require"
+)
+
+# Close the test connection immediately
+test_connection.close()
+
+st.success("Supabase database connected successfully!")
+
+except Exception as error:
+# Do not display the connection URL or password
+st.error(
+"Supabase connection failed. "
+f"Error type: {type(error).name}. "
+"Check your Streamlit Secret and database connection settings."
+)
+
+# =========================================================
+# END TEMPORARY CONNECTION TEST
+# ========================================================= 
 # =========================================================
 # SESSION STATE
 # =========================================================
