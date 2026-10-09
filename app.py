@@ -994,7 +994,93 @@ def generate_character_voice(character, text):
         return None
 
     return None
+# =========================================================
+# 🎙️ VOICE INPUT TEST — MICROPHONE + MUSIC ANIMATION
+# =========================================================
 
+import streamlit.components.v1 as components
+
+def voice_input_test():
+    components.html("""
+    <style>
+        .voice-box {
+            text-align: center;
+            padding: 12px;
+        }
+
+        .mic {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            border: none;
+            background: #222;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+        }
+
+        .notes {
+            display: none;
+            font-size: 25px;
+            animation: float 1s infinite alternate;
+        }
+
+        .listening {
+            display: none;
+            margin-top: 8px;
+            font-size: 14px;
+        }
+
+        @keyframes float {
+            from { transform: translateY(5px); }
+            to   { transform: translateY(-8px); }
+        }
+    </style>
+
+    <div class="voice-box">
+        <div id="notes" class="notes">🎵 ♪ ♫ ♪ 🎵</div>
+
+        <button id="mic" class="mic">🎙️</button>
+
+        <div id="listening" class="listening">
+            Listening...
+        </div>
+    </div>
+
+    <script>
+        const mic = document.getElementById("mic");
+        const notes = document.getElementById("notes");
+        const listening = document.getElementById("listening");
+
+        let active = false;
+
+        mic.onclick = async () => {
+
+            active = !active;
+
+            if (active) {
+
+                try {
+                    await navigator.mediaDevices.getUserMedia({
+                        audio: true
+                    });
+
+                    notes.style.display = "block";
+                    listening.style.display = "block";
+
+                } catch (error) {
+                    alert("Microphone permission is required.");
+                    active = false;
+                }
+
+            } else {
+
+                notes.style.display = "none";
+                listening.style.display = "none";
+            }
+        };
+    </script>
+    """, height=125)
 # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
@@ -1357,7 +1443,7 @@ def show_conversation():
     # =====================================================
     # TEXT INPUT
     # =====================================================
-
+voice_input_test()
     user_message = st.chat_input(
         "Talk to "
         + character_name
