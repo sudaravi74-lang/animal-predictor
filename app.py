@@ -42,7 +42,14 @@ defaults = {
     # =====================================================
 
     "active_character": "gogy",
-    "character_conversation": [],
+     
+# Separate chat histories for each character
+"gogy_conversation": [],
+"titli_conversation": [],
+
+# Keep the existing setting for compatibility
+"character_conversation": [],
+    
     "voice_enabled": True,
     "audio_enabled": True,
     "last_audio": None,
@@ -1607,6 +1614,17 @@ def show_conversation():
         st.session_state.active_character
     )
 
+# =====================================================
+# USE THE ACTIVE CHARACTER'S OWN CHAT HISTORY
+# =====================================================
+
+if character == "titli":
+    conversation_key = "titli_conversation"
+else:
+    conversation_key = "gogy_conversation"
+
+conversation_history = st.session_state[conversation_key]
+    
     if character == "titli":
 
         character_name = "Titli"
@@ -1658,23 +1676,23 @@ def show_conversation():
         + " about anything."
     )
 
+     
     # =====================================================
-    # INITIAL GREETING
+    # INITIAL GREETING — SEPARATE CHARACTER HISTORY
     # =====================================================
 
-    if not st.session_state.character_conversation:
+    if not conversation_history:
 
         with st.chat_message("assistant"):
 
             st.write(greeting)
-
+            
+     
     # =====================================================
-    # PREVIOUS CONVERSATION
+    # PREVIOUS CONVERSATION — ACTIVE CHARACTER ONLY
     # =====================================================
 
-    for message in (
-        st.session_state.character_conversation
-    ):
+    for message in conversation_history:
 
         if message["role"] == "user":
 
@@ -1691,6 +1709,7 @@ def show_conversation():
                 st.write(
                     message["content"]
                 )
+                
 
              # =====================================================
     # TEXT INPUT + VOICE INPUT
@@ -1715,7 +1734,7 @@ def show_conversation():
         # SAVE USER MESSAGE
         # =================================================
 
-        st.session_state.character_conversation.append(
+         conversation_history.append(
             {
                 "role": "user",
                 "content": user_message
@@ -1740,7 +1759,7 @@ def show_conversation():
                 answer = ask_character_ai(
                     character,
                     user_message,
-                    st.session_state.character_conversation
+                     conversation_history
                 )
 
             # =============================================
@@ -1783,16 +1802,18 @@ def show_conversation():
 
                     play_character_audio()
 
-                # =========================================
-                # SAVE CHARACTER ANSWER
-                # =========================================
+                 
+        # =====================================================
+        # SAVE CHARACTER ANSWER — CHARACTER-SPECIFIC HISTORY
+        # =====================================================
 
-                st.session_state.character_conversation.append(
-                    {
-                        "role": "assistant",
-                        "content": answer
-                    }
+        conversation_history.append(
+            {
+                "role": "assistant",
+                "content": answer
+            }
                 )
+
 
     # =====================================================
     # VOICE SETTINGS
