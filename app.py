@@ -137,8 +137,8 @@ def search_taxon_cached(search_name):
             ):
                 return taxon
 
-        # Otherwise use first result
-        return results[0]
+         # Do not return an unrelated organism when no exact match exists.
+return None
 
     except Exception as e:
 
