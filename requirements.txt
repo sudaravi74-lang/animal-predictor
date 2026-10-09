@@ -2,3 +2,4 @@ streamlit
 pillow
 requests
 google-genai
+psycopg2-binary
