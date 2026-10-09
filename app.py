@@ -21,37 +21,39 @@ st.set_page_config(
     page_title="Nature Encyclopedia AI",
     page_icon="🌍",
     layout="wide"
-)# =========================================================
+)
+
+# ==========================================
 # SUPABASE CONNECTION TEST - TEMPORARY
-# ========================================================= 
+# ==========================================
 
 try:
-# Read the private database URL from Streamlit Secrets
-db_url = st.secrets["SUPABASE_DB_URL"]
+    # Read the private database URL from Streamlit Secrets
+    db_url = st.secrets["SUPABASE_DB_URL"]
 
-# Open a secure connection to Supabase
-test_connection = psycopg2.connect(
-    db_url,
-    connect_timeout=10,
-    sslmode="require"
-)
+    # Open a secure connection to Supabase
+    test_connection = psycopg2.connect(
+        db_url,
+        connect_timeout=10,
+        sslmode="require"
+    )
 
-# Close the test connection immediately
-test_connection.close()
+    # Close the test connection immediately
+    test_connection.close()
 
-st.success("Supabase database connected successfully!")
+    st.success("Supabase database connected successfully!")
 
 except Exception as error:
-# Do not display the connection URL or password
-st.error(
-"Supabase connection failed. "
-f"Error type: {type(error).name}. "
-"Check your Streamlit Secret and database connection settings."
-)
+    # Do not display the database URL or password
+    st.error(
+        "Supabase connection failed. "
+        f"Error type: {type(error).__name__}. "
+        "Check your Streamlit Secret and database connection settings."
+    )
 
-# =========================================================
+# ==========================================
 # END TEMPORARY CONNECTION TEST
-# =========================================================
+# ==========================================
 
  
 # =========================================================
