@@ -4,6 +4,7 @@ import requests
 import hashlib
 import json
 import time
+import uuid
 from io import BytesIO
 from PIL import Image
 from google import genai
@@ -66,6 +67,154 @@ for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+# =========================================================
+# SUPABASE CHAT STORAGE
+# Uses SUPABASE_DB_URL from Streamlit Secrets.
+# Chats are scoped to this Streamlit session for privacy.
+# A real public multi-user app should add user authentication.
+# =========================================================
+
+if "chat_session_id" not in st.session_state:
+    st.session_state.chat_session_id = str(uuid.uuid4())
+
+if "current_chat_ids" not in st.session_state:
+    st.session_state.current_chat_ids = {"gogy": None, "titli": None}
+
+
+def get_chat_db_connection():
+    """Open a secure SSL connection to the Supabase Postgres database."""
+    db_url = st.secrets.get("SUPABASE_DB_URL", "")
+    if not db_url:
+        return None
+    return psycopg2.connect(db_url, connect_timeout=10, sslmode="require")
+
+
+def ensure_chat_table():
+    """Create the chat table and index if they do not already exist."""
+    connection = get_chat_db_connection()
+    if connection is None:
+        return False
+    try:
+        with connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS nature_ai_chats (
+                        chat_id UUID PRIMARY KEY,
+                        session_id TEXT NOT NULL,
+                        character TEXT NOT NULL CHECK (character IN ('gogy', 'titli')),
+                        title TEXT NOT NULL,
+                        messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS nature_ai_chats_session_updated_idx
+                    ON nature_ai_chats (session_id, updated_at DESC)
+                """)
+        return True
+    finally:
+        connection.close()
+
+
+def save_chat_to_supabase(character, messages, chat_id=None):
+    """Insert/update one chat. Returns (success, chat_id, error_message)."""
+    if not messages:
+        return False, chat_id, "There are no messages to save yet."
+    connection = None
+    try:
+        if not ensure_chat_table():
+            return False, chat_id, "SUPABASE_DB_URL is missing from Streamlit Secrets."
+        connection = get_chat_db_connection()
+        new_chat_id = str(chat_id or uuid.uuid4())
+        first_user_message = next(
+            (str(item.get("content", "")).strip() for item in messages
+             if item.get("role") == "user" and str(item.get("content", "")).strip()),
+            "Conversation with " + character.capitalize()
+        )
+        title = first_user_message[:80]
+        with connection:
+            with connection.cursor() as cursor:
+                if chat_id:
+                    cursor.execute("""
+                        UPDATE nature_ai_chats
+                        SET title = %s, messages = %s::jsonb, updated_at = NOW()
+                        WHERE chat_id = %s AND session_id = %s AND character = %s
+                    """, (title, json.dumps(messages), new_chat_id,
+                          st.session_state.chat_session_id, character))
+                    if cursor.rowcount == 0:
+                        # Never update a chat belonging to a different session.
+                        cursor.execute("""
+                            INSERT INTO nature_ai_chats
+                                (chat_id, session_id, character, title, messages)
+                            VALUES (%s, %s, %s, %s, %s::jsonb)
+                        """, (new_chat_id, st.session_state.chat_session_id,
+                              character, title, json.dumps(messages)))
+                else:
+                    cursor.execute("""
+                        INSERT INTO nature_ai_chats
+                            (chat_id, session_id, character, title, messages)
+                        VALUES (%s, %s, %s, %s, %s::jsonb)
+                    """, (new_chat_id, st.session_state.chat_session_id,
+                          character, title, json.dumps(messages)))
+        return True, new_chat_id, None
+    except Exception as exc:
+        return False, chat_id, str(exc)
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def get_saved_chats(character):
+    """Return saved chats for the current Streamlit session only."""
+    connection = None
+    try:
+        if not ensure_chat_table():
+            return [], "SUPABASE_DB_URL is missing from Streamlit Secrets."
+        connection = get_chat_db_connection()
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT chat_id::text, title, messages, updated_at
+                FROM nature_ai_chats
+                WHERE session_id = %s AND character = %s
+                ORDER BY updated_at DESC
+                LIMIT 50
+            """, (st.session_state.chat_session_id, character))
+            rows = cursor.fetchall()
+        return [
+            {"chat_id": row[0], "title": row[1],
+             "messages": row[2] if isinstance(row[2], list) else json.loads(row[2]),
+             "updated_at": row[3]}
+            for row in rows
+        ], None
+    except Exception as exc:
+        return [], str(exc)
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def delete_chat_from_supabase(chat_id):
+    """Delete only a chat owned by the current Streamlit session."""
+    connection = None
+    try:
+        if not ensure_chat_table():
+            return False, "SUPABASE_DB_URL is missing from Streamlit Secrets."
+        connection = get_chat_db_connection()
+        with connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    DELETE FROM nature_ai_chats
+                    WHERE chat_id = %s AND session_id = %s
+                """, (chat_id, st.session_state.chat_session_id))
+                deleted = cursor.rowcount > 0
+        return deleted, None if deleted else "Chat not found in this session."
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        if connection is not None:
+            connection.close()
+
 
 # =========================================================
 # iNATURALIST API
@@ -81,12 +230,7 @@ INAT_OBSERVATIONS_URL = (
 
 HEADERS = {
     "User-Agent": "Nature-Encyclopedia-AI/1.0"
-}
-
-
-
- 
-# ==========================================
+    }# ==========================================
 # iNATURALIST TAXON SEARCH
 # ==========================================
 
@@ -570,9 +714,8 @@ def show_species_page(
 
     st.markdown(
         "### *" + scientific_name + "*"
-    )
-
-    # =====================================================
+            )
+        # =====================================================
     # BASIC INFORMATION
     # =====================================================
 
@@ -784,6 +927,8 @@ def show_home():
             st.session_state.active_character = "gogy"
 
             st.session_state.character_conversation = []
+            st.session_state.gogy_conversation = []
+            st.session_state.current_chat_ids["gogy"] = None
 
             st.session_state.page = "conversation"
 
@@ -807,6 +952,8 @@ def show_home():
             st.session_state.active_character = "titli"
 
             st.session_state.character_conversation = []
+            st.session_state.titli_conversation = []
+            st.session_state.current_chat_ids["titli"] = None
 
             st.session_state.page = "conversation"
 
@@ -1394,8 +1541,7 @@ def voice_input_test():
         None
     )
 
-    return voice_text
-                # =========================================================
+    return voice_text# =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
@@ -1706,6 +1852,57 @@ def show_conversation():
     st.caption(f"Talk to {character_name} about anything.")
 
     # -----------------------------------------------------
+    # 3A. SAVED CHAT HISTORY — LOAD, SAVE, OR DELETE
+    # -----------------------------------------------------
+    with st.expander("🗂️ Chat History / Save / Delete", expanded=False):
+        if st.button("💾 Save this chat", key=f"save_chat_{character}", use_container_width=True):
+            ok, saved_id, error = save_chat_to_supabase(
+                character, conversation_history,
+                st.session_state.current_chat_ids.get(character)
+            )
+            if ok:
+                st.session_state.current_chat_ids[character] = saved_id
+                st.success("Chat saved to Supabase.")
+                st.rerun()
+            else:
+                st.error("Could not save chat: " + str(error))
+
+        saved_chats, history_error = get_saved_chats(character)
+        if history_error:
+            st.warning("Chat history is unavailable: " + str(history_error))
+        elif not saved_chats:
+            st.caption("No saved chats for this character in this session yet.")
+        else:
+            chat_labels = {
+                f"{item['title']} · {item['updated_at'].strftime('%d %b %Y %H:%M') if item['updated_at'] else 'Saved'} · {item['chat_id'][:8]}": item
+                for item in saved_chats
+            }
+            selected_label = st.selectbox(
+                "Saved conversations", list(chat_labels.keys()),
+                key=f"saved_chat_select_{character}"
+            )
+            load_col, delete_col = st.columns(2)
+            with load_col:
+                if st.button("📂 Load chat", key=f"load_chat_{character}", use_container_width=True):
+                    selected_chat = chat_labels[selected_label]
+                    st.session_state[conversation_key] = selected_chat["messages"]
+                    st.session_state.current_chat_ids[character] = selected_chat["chat_id"]
+                    st.session_state[pending_key] = None
+                    st.rerun()
+            with delete_col:
+                if st.button("🗑️ Delete chat", key=f"delete_chat_{character}", use_container_width=True):
+                    selected_chat = chat_labels[selected_label]
+                    ok, error = delete_chat_from_supabase(selected_chat["chat_id"])
+                    if ok:
+                        if st.session_state.current_chat_ids.get(character) == selected_chat["chat_id"]:
+                            st.session_state.current_chat_ids[character] = None
+                            st.session_state[conversation_key] = []
+                        st.success("Chat deleted.")
+                        st.rerun()
+                    else:
+                        st.error("Could not delete chat: " + str(error))
+
+    # -----------------------------------------------------
     # 4. Render greeting and existing conversation
     # -----------------------------------------------------
     if not conversation_history:
@@ -1789,7 +1986,17 @@ def show_conversation():
                         except Exception as exc:
                             st.session_state["audio_error"] = str(exc)
 
-    # -----------------------------------------------------
+            # Auto-save every new message/answer so a completed turn is persisted.
+            if conversation_history:
+                saved_ok, saved_id, saved_error = save_chat_to_supabase(
+                    character, conversation_history,
+                    st.session_state.current_chat_ids.get(character)
+                )
+                if saved_ok:
+                    st.session_state.current_chat_ids[character] = saved_id
+                else:
+                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
+        # -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -1851,6 +2058,16 @@ def show_conversation():
                                 play_character_audio()
                         except Exception as exc:
                             st.session_state["audio_error"] = str(exc)
+
+                    # Persist the retry answer to Supabase before refreshing.
+                    saved_ok, saved_id, saved_error = save_chat_to_supabase(
+                        character, conversation_history,
+                        st.session_state.current_chat_ids.get(character)
+                    )
+                    if saved_ok:
+                        st.session_state.current_chat_ids[character] = saved_id
+                    else:
+                        st.warning("Retry worked, but Supabase save failed: " + str(saved_error))
 
                     # Refresh to render the saved answer in chat history.
                     st.rerun()
@@ -2399,4 +2616,5 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 
 # Render the selected page.
 page_function()
-        
+
+    
