@@ -1733,11 +1733,12 @@ def show_conversation():
 
     if user_message:
 
-        # =================================================
+        
+        # =====================================================
         # SAVE USER MESSAGE
-        # =================================================
+        # =====================================================
 
-         conversation_history.append(
+        conversation_history.append(
             {
                 "role": "user",
                 "content": user_message
@@ -1745,8 +1746,8 @@ def show_conversation():
         )
 
         with st.chat_message("user"):
-
             st.write(user_message)
+            
 
         # =================================================
         # CHARACTER ANSWER
