@@ -1604,333 +1604,226 @@ Now reply naturally as {character.capitalize()}.
     return None
 
 
+
 # =========================================================
-# CONVERSATION PAGE
+# CONVERSATION PAGE — MODULAR, RETRY-SAFE VERSION
 # =========================================================
 
 def show_conversation():
+    # -----------------------------------------------------
+    # 1. Resolve the active character safely
+    # -----------------------------------------------------
+    character = st.session_state.get("active_character", "gogy")
+    if character not in ("gogy", "titli"):
+        character = "gogy"
+        st.session_state.active_character = character
 
-    character = (
-        st.session_state.active_character
-    )
+    # Keep history and retry state separate for each character.
+    conversation_key = f"{character}_conversation"
+    pending_key = f"{character}_pending_retry_message"
 
-
-    # =====================================================
-    # USE THE ACTIVE CHARACTER'S OWN CHAT HISTORY
-    # =====================================================
-
-    if character == "titli":
-        conversation_key = "titli_conversation"
-    else:
-        conversation_key = "gogy_conversation"
+    if conversation_key not in st.session_state:
+        st.session_state[conversation_key] = []
+    if pending_key not in st.session_state:
+        st.session_state[pending_key] = None
 
     conversation_history = st.session_state[conversation_key]
 
-    # =====================================================
-    # CHARACTER DETAILS AND GREETINGS
-    # =====================================================
-
+    # -----------------------------------------------------
+    # 2. Character details — define before using them
+    # -----------------------------------------------------
     if character == "titli":
         character_name = "Titli"
         character_icon = "👧🦋"
-
         greeting = (
             "Ooooh! Hiii! I'm Titli! 🦋\n\n"
             "What do you want to discover?"
         )
-
     else:
         character_name = "Gogy"
-
         character_icon = "👦"
-
         greeting = (
             "Hiii! I'm Gogy! 👋\n\n"
             "What are you curious about?"
         )
-        
 
-    # =====================================================
-    # HOME BUTTON
-    # =====================================================
-
-    if st.button(
-        "← Home",
-        key="conversation_home"
-    ):
-
+    # -----------------------------------------------------
+    # 3. Navigation and character header
+    # -----------------------------------------------------
+    if st.button("← Home", key="conversation_home"):
         st.session_state.page = "home"
-
         st.rerun()
 
-    # =====================================================
-    # CHARACTER HEADER
-    # =====================================================
+    st.title(f"{character_icon} Talk to {character_name}")
+    st.caption(f"Talk to {character_name} about anything.")
 
-    st.title(
-        character_icon
-        + " Talk to "
-        + character_name
-    )
-
-    st.caption(
-        "Talk to "
-        + character_name
-        + " about anything."
-    )
-
-     
-    # =====================================================
-    # INITIAL GREETING — SEPARATE CHARACTER HISTORY
-    # =====================================================
-
+    # -----------------------------------------------------
+    # 4. Render greeting and existing conversation
+    # -----------------------------------------------------
     if not conversation_history:
-
         with st.chat_message("assistant"):
-
             st.write(greeting)
-            
-     
-    # =====================================================
-    # PREVIOUS CONVERSATION — ACTIVE CHARACTER ONLY
-    # =====================================================
 
     for message in conversation_history:
+        role = message.get("role", "assistant")
+        content = message.get("content", "")
+        if role not in ("user", "assistant"):
+            role = "assistant"
+        with st.chat_message(role):
+            st.write(content)
 
-        if message["role"] == "user":
+    # -----------------------------------------------------
+    # 5. Text and microphone input
+    # -----------------------------------------------------
+    voice_text = voice_input_test()
+    user_message = st.chat_input(
+        f"Talk to {character_name}...",
+        key=f"{character}_chat_input"
+    )
+
+    # Use recognised speech only when no typed message exists.
+    if not user_message and voice_text:
+        user_message = str(voice_text).strip() or None
+
+    # -----------------------------------------------------
+    # 6. Process a new message
+    # -----------------------------------------------------
+    if user_message:
+        user_message = user_message.strip()
+        if user_message:
+            conversation_history.append({
+                "role": "user",
+                "content": user_message
+            })
+            st.session_state[pending_key] = user_message
 
             with st.chat_message("user"):
+                st.write(user_message)
 
-                st.write(
-                    message["content"]
-                )
+            # Exclude the latest message from history because
+            # ask_character_ai receives it separately.
+            history_for_prompt = conversation_history[:-1]
 
-        else:
-
+            answer = None
             with st.chat_message("assistant"):
+                with st.spinner(f"{character_name} is thinking..."):
+                    try:
+                        answer = ask_character_ai(
+                            character,
+                            user_message,
+                            history_for_prompt
+                        )
+                    except Exception as exc:
+                        st.session_state["character_ai_error"] = str(exc)
+                        answer = None
 
-                st.write(
-                    message["content"]
-                )
-                
+                if not answer:
+                    st.warning(
+                        f"I couldn't connect to {character_name} right now. "
+                        "Your message is saved; use the Retry button below."
+                    )
+                else:
+                    answer = str(answer).strip()
+                    st.write(answer)
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": answer
+                    })
+                    st.session_state[pending_key] = None
 
-             # =====================================================
-# TEXT INPUT + VOICE INPUT + RETRY SUPPORT
-# =====================================================
+                    # Voice errors must not break the text conversation.
+                    if st.session_state.get("audio_enabled", True):
+                        try:
+                            audio = generate_character_voice(character, answer)
+                            if audio:
+                                prepare_audio(audio, character)
+                                play_character_audio()
+                        except Exception as exc:
+                            st.session_state["audio_error"] = str(exc)
 
+    # -----------------------------------------------------
+    # 7. Retry the last failed message for this character
+    # -----------------------------------------------------
+    pending_message = st.session_state.get(pending_key)
 
- 
-     
-    # FIX: DEFINE CHARACTER NAME SAFELY
-    character = st.session_state.get("active_character", "gogy")
-    character_name = "Titli" if character == "titli" else "Gogy"
-    voice_text = voice_input_test()
-
-
-
-user_message = st.chat_input(
-    "Talk to " + character_name + "..."
-)
-
-# Use voice input if no text was entered
-if not user_message and voice_text:
-    user_message = voice_text
-
-# =====================================================
-# PROCESS A NEW USER MESSAGE
-# =====================================================
-
-if user_message:
-
-    # Save and display the user's message
-    conversation_history.append({
-        "role": "user",
-        "content": user_message
-    })
-
-    with st.chat_message("user"):
-        st.write(user_message)
-
-    # Remember the message in case Gemini fails
-    st.session_state["pending_retry_message"] = user_message
-    st.session_state["pending_retry_character"] = character
-
-    # Do not include the current message twice
-    history_for_prompt = conversation_history[:-1]
-
-    # =================================================
-    # ASK GOGY OR TITLI
-    # =================================================
-
-    with st.chat_message("assistant"):
-
-        with st.spinner(character_name + " is thinking..."):
-
-            answer = ask_character_ai(
-                character,
-                user_message,
-                history_for_prompt
-            )
-
-        # =============================================
-        # GEMINI FAILED — KEEP MESSAGE FOR RETRY
-        # =============================================
-
-        if not answer:
-
-            st.warning(
-                "I couldn't connect to "
-                + character_name
-                + " right now. Please try again below."
-            )
-
-        else:
-
-            # Show the answer
-            st.write(answer)
-
-            # Save the successful answer
-            conversation_history.append({
-                "role": "assistant",
-                "content": answer
-            })
-
-            # Clear the failed-message retry data
-            st.session_state["pending_retry_message"] = None
-            st.session_state["pending_retry_character"] = None
-
-            # =========================================
-            # GENERATE CHARACTER VOICE
-            # =========================================
-
-            audio = generate_character_voice(
-                character,
-                answer
-            )
-
-            if audio:
-                prepare_audio(audio, character)
-                play_character_audio()
-
-# =====================================================
-# RETRY BUTTON — REUSE THE SAME MESSAGE AND CHARACTER
-# =====================================================
-
-pending_message = st.session_state.get(
-    "pending_retry_message"
-)
-
-pending_character = st.session_state.get(
-    "pending_retry_character"
-)
-
-if pending_message and pending_character == character:
-
-    st.info(
-        "Your message is saved. You can ask "
-        + character_name
-        + " to answer it again."
-    )
-
-    if st.button(
-        "🔄 Try Again — " + character_name,
-        key="retry_" + character
-    ):
-
-        # Use the existing message; do not append it again
-        history_for_prompt = conversation_history
-
-        if (
-            history_for_prompt
-            and history_for_prompt[-1].get("role") == "user"
-            and history_for_prompt[-1].get("content") == pending_message
-        ):
-            history_for_prompt = history_for_prompt[:-1]
-
-        with st.chat_message("assistant"):
-
-            with st.spinner(
-                character_name + " is trying again..."
-            ):
-
-                retry_answer = ask_character_ai(
-                    character,
-                    pending_message,
-                    history_for_prompt
-                )
-
-            if not retry_answer:
-
-                st.warning(
-                    character_name
-                    + " still couldn't connect. "
-                    + "Your message is saved. Please try again."
-                )
-
-            else:
-
-                st.write(retry_answer)
-
-                # Save the successful reply only
-                conversation_history.append({
-                    "role": "assistant",
-                    "content": retry_answer
-                })
-
-                # Clear retry data after success
-                st.session_state["pending_retry_message"] = None
-                st.session_state["pending_retry_character"] = None
-
-                # Generate the character's voice
-                retry_audio = generate_character_voice(
-                    character,
-                    retry_answer
-                )
-
-                if retry_audio:
-                    prepare_audio(retry_audio, character)
-                    play_character_audio()
-
-                # Refresh to show the completed conversation
-                st.rerun()
-
-
-    # =====================================================
-    # VOICE SETTINGS
-    # =====================================================
-
-    st.divider()
-
-    st.subheader(
-        "🔊 Voice"
-    )
-
-    st.session_state.audio_enabled = (
-        st.toggle(
-            "Enable character voice",
-            value=st.session_state.get(
-                "audio_enabled",
-                True
-            ),
-            key="character_audio_toggle"
+    if pending_message:
+        st.info(
+            f"Your message to {character_name} is saved. "
+            "You can retry it without typing it again."
         )
+
+        if st.button(
+            f"🔄 Retry message — {character_name}",
+            key=f"retry_{character}"
+        ):
+            # Do not append the user message a second time.
+            history_for_prompt = conversation_history
+            if (
+                history_for_prompt
+                and history_for_prompt[-1].get("role") == "user"
+                and history_for_prompt[-1].get("content") == pending_message
+            ):
+                history_for_prompt = history_for_prompt[:-1]
+
+            retry_answer = None
+            with st.chat_message("assistant"):
+                with st.spinner(f"{character_name} is trying again..."):
+                    try:
+                        retry_answer = ask_character_ai(
+                            character,
+                            pending_message,
+                            history_for_prompt
+                        )
+                    except Exception as exc:
+                        st.session_state["character_ai_error"] = str(exc)
+                        retry_answer = None
+
+                if not retry_answer:
+                    st.warning(
+                        f"{character_name} still couldn't answer. "
+                        "Your message is still saved. Please retry again."
+                    )
+                else:
+                    retry_answer = str(retry_answer).strip()
+                    st.write(retry_answer)
+                    conversation_history.append({
+                        "role": "assistant",
+                        "content": retry_answer
+                    })
+                    st.session_state[pending_key] = None
+
+                    if st.session_state.get("audio_enabled", True):
+                        try:
+                            retry_audio = generate_character_voice(
+                                character,
+                                retry_answer
+                            )
+                            if retry_audio:
+                                prepare_audio(retry_audio, character)
+                                play_character_audio()
+                        except Exception as exc:
+                            st.session_state["audio_error"] = str(exc)
+
+                    # Refresh to render the saved answer in chat history.
+                    st.rerun()
+
+    # -----------------------------------------------------
+    # 8. Voice settings
+    # -----------------------------------------------------
+    st.divider()
+    st.subheader("🔊 Voice")
+    st.session_state.audio_enabled = st.toggle(
+        "Enable character voice",
+        value=st.session_state.get("audio_enabled", True),
+        key="character_audio_toggle"
     )
 
     if st.session_state.audio_enabled:
-
-        st.caption(
-            "🔊 "
-            + character_name
-            + " will speak their replies."
-        )
-
+        st.caption(f"🔊 {character_name} will speak their replies.")
     else:
+        st.caption("🔇 Character voice is turned off.")
 
-        st.caption(
-            "🔇 Character voice is turned off."
-        )
-
-  # =========================================================
+ # =========================================================
 # SEARCH PAGE
 # =========================================================
 
@@ -2385,68 +2278,79 @@ def show_identify():
 
 
 # =========================================================
-# ☰ GLOBAL SIDEBAR NAVIGATION
-# Available on every page of the app
+# GLOBAL SIDEBAR NAVIGATION
+# Add future navigation items to NAV_ITEMS below.
 # =========================================================
 
 def show_sidebar():
+    nav_items = [
+        ("🏠 Home", "home"),
+        ("🧒 Talk to Gogy", "gogy"),
+        ("🦋 Talk to Titli", "titli"),
+        ("🔎 Search Organism", "search"),
+        ("📸 Identify from Photo", "identify"),
+    ]
 
     with st.sidebar:
-
         st.title("🌍 Nature AI")
         st.caption("Where would you like to go?")
-
         st.divider()
 
-        # 🏠 HOME
-        if st.button("🏠 Home", use_container_width=True):
-            st.session_state.page = "home"
-            st.rerun()
+        for label, destination in nav_items:
+            if st.button(
+                label,
+                key=f"nav_{destination}",
+                use_container_width=True
+            ):
+                if destination in ("gogy", "titli"):
+                    st.session_state.active_character = destination
+                    st.session_state.page = "conversation"
+                else:
+                    st.session_state.page = destination
 
-        # 🧒 GOGY
-        if st.button("🧒 Talk to Gogy", use_container_width=True):
-            st.session_state.active_character = "gogy"
-            st.session_state.page = "conversation"
-            st.rerun()
-
-        # 🦋 TITLI
-        if st.button("🦋 Talk to Titli", use_container_width=True):
-            st.session_state.active_character = "titli"
-            st.session_state.page = "conversation"
-            st.rerun()
-
-        # 🔎 SEARCH ORGANISM
-        if st.button("🔎 Search Organism", use_container_width=True):
-            st.session_state.page = "search"
-            st.rerun()
-
-        # 📸 IDENTIFY FROM PHOTO
-        if st.button("📸 Identify from Photo", use_container_width=True):
-            st.session_state.page = "identify"
-            st.rerun()
+                st.rerun()
             # =========================================================
 # SHOW SIDEBAR BEFORE OPENING ANY PAGE
 # =========================================================
 
 show_sidebar()
-# =========================================================
-# APP ROUTER
-# =========================================================
 
-if st.session_state.page == "home":
+# ============================================================
+# APP ROUTER — CENTRAL PLACE TO REGISTER NEW PAGES
+# To add a page later:
+# 1. Define the new page function above this router.
+# 2. Add its page key and function to PAGE_ROUTES.
+# ============================================================
 
-    show_home()
+PAGE_ROUTES = {
+    "home": show_home,
+    "search": show_search,
+    "identify": show_identify,
+    "conversation": show_conversation,
+    "gogy": show_conversation,
+    "titli": show_conversation,
+}
 
-elif st.session_state.page == "search":
+# ============================================================
+# OPEN THE SELECTED PAGE
+# ============================================================
 
-    show_search()
+current_page = st.session_state.get("page", "home")
 
-elif st.session_state.page == "identify":
+# Fall back safely if the selected page key is unknown.
 
-    show_identify()
+# ============================================================
+# ROUTER SAFETY — FALL BACK TO HOME FOR UNKNOWN PAGE KEYS
+# ============================================================
 
-elif st.session_state.page == "conversation":
+if current_page not in PAGE_ROUTES:
+    st.session_state.page = "home"
+    current_page = "home"
 
-    show_conversation()    
+# Get the selected page function safely.
+page_function = PAGE_ROUTES.get(current_page, show_home)
 
- 
+# Render the selected page.
+page_function()
+
+
