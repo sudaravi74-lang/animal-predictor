@@ -1974,12 +1974,13 @@ def show_identify():
         "try to identify the organism."
     )
 
-    # =====================================================
-    # UPLOAD
+        # =====================================================
+    # 📷 PHOTO INPUT — GALLERY + CAMERA
     # =====================================================
 
+    # 📁 Option 1: Choose an existing photograph
     uploaded_file = st.file_uploader(
-        "Choose a photograph",
+        "📁 Choose a photograph from your gallery",
         type=[
             "jpg",
             "jpeg",
@@ -1988,14 +1989,26 @@ def show_identify():
         ]
     )
 
-    if uploaded_file:
+    # 📸 Option 2: Take a new photograph with the camera
+    camera_photo = st.camera_input(
+        "📸 Or take a photograph"
+    )
 
-        image_bytes = uploaded_file.getvalue()
+    # Use whichever option the user selected
+    selected_photo = camera_photo or uploaded_file
+    # =====================================================
+    # PROCESS SELECTED PHOTO
+    # =====================================================
+
+    if selected_photo:
+
+        image_bytes = selected_photo.getvalue()
 
         image_hash = hashlib.sha256(
             image_bytes
         ).hexdigest()
 
+         
         # =================================================
         # NEW IMAGE
         # =================================================
