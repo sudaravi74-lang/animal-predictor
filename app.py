@@ -1715,108 +1715,176 @@ def show_conversation():
                 
 
              # =====================================================
-    # TEXT INPUT + VOICE INPUT
-    # =====================================================
+# TEXT INPUT + VOICE INPUT + RETRY SUPPORT
+# =====================================================
 
-    voice_text = voice_input_test()
+voice_text = voice_input_test()
 
-    user_message = st.chat_input(
-        "Talk to "
+user_message = st.chat_input(
+    "Talk to " + character_name + "..."
+)
+
+# Use voice input if no text was entered
+if not user_message and voice_text:
+    user_message = voice_text
+
+# =====================================================
+# PROCESS A NEW USER MESSAGE
+# =====================================================
+
+if user_message:
+
+    # Save and display the user's message
+    conversation_history.append({
+        "role": "user",
+        "content": user_message
+    })
+
+    with st.chat_message("user"):
+        st.write(user_message)
+
+    # Remember the message in case Gemini fails
+    st.session_state["pending_retry_message"] = user_message
+    st.session_state["pending_retry_character"] = character
+
+    # Do not include the current message twice
+    history_for_prompt = conversation_history[:-1]
+
+    # =================================================
+    # ASK GOGY OR TITLI
+    # =================================================
+
+    with st.chat_message("assistant"):
+
+        with st.spinner(character_name + " is thinking..."):
+
+            answer = ask_character_ai(
+                character,
+                user_message,
+                history_for_prompt
+            )
+
+        # =============================================
+        # GEMINI FAILED — KEEP MESSAGE FOR RETRY
+        # =============================================
+
+        if not answer:
+
+            st.warning(
+                "I couldn't connect to "
+                + character_name
+                + " right now. Please try again below."
+            )
+
+        else:
+
+            # Show the answer
+            st.write(answer)
+
+            # Save the successful answer
+            conversation_history.append({
+                "role": "assistant",
+                "content": answer
+            })
+
+            # Clear the failed-message retry data
+            st.session_state["pending_retry_message"] = None
+            st.session_state["pending_retry_character"] = None
+
+            # =========================================
+            # GENERATE CHARACTER VOICE
+            # =========================================
+
+            audio = generate_character_voice(
+                character,
+                answer
+            )
+
+            if audio:
+                prepare_audio(audio, character)
+                play_character_audio()
+
+# =====================================================
+# RETRY BUTTON — REUSE THE SAME MESSAGE AND CHARACTER
+# =====================================================
+
+pending_message = st.session_state.get(
+    "pending_retry_message"
+)
+
+pending_character = st.session_state.get(
+    "pending_retry_character"
+)
+
+if pending_message and pending_character == character:
+
+    st.info(
+        "Your message is saved. You can ask "
         + character_name
-        + "..."
+        + " to answer it again."
     )
 
-    # If voice input was used, send the recognized
-    # speech through the same existing AI system.
-    if not user_message and voice_text:
-        user_message = voice_text
+    if st.button(
+        "🔄 Try Again — " + character_name,
+        key="retry_" + character
+    ):
 
-    if user_message:
+        # Use the existing message; do not append it again
+        history_for_prompt = conversation_history
 
-        
-        # =====================================================
-        # SAVE USER MESSAGE
-        # =====================================================
-
-        conversation_history.append(
-            {
-                "role": "user",
-                "content": user_message
-            }
-        )
-
-        with st.chat_message("user"):
-            st.write(user_message)
-            
-
-        # =================================================
-        # CHARACTER ANSWER
-        # =================================================
+        if (
+            history_for_prompt
+            and history_for_prompt[-1].get("role") == "user"
+            and history_for_prompt[-1].get("content") == pending_message
+        ):
+            history_for_prompt = history_for_prompt[:-1]
 
         with st.chat_message("assistant"):
 
             with st.spinner(
-                character_name
-                + " is thinking..."
+                character_name + " is trying again..."
             ):
 
-                answer = ask_character_ai(
+                retry_answer = ask_character_ai(
                     character,
-                    user_message,
-                     conversation_history
+                    pending_message,
+                    history_for_prompt
                 )
 
-            # =============================================
-            # GEMINI FAILED
-            # =============================================
-
-            if not answer:
+            if not retry_answer:
 
                 st.warning(
-                    "I couldn't connect to "
-                    + character_name
-                    + " right now. Please try again."
+                    character_name
+                    + " still couldn't connect. "
+                    + "Your message is saved. Please try again."
                 )
 
             else:
 
-                # =========================================
-                # SHOW TEXT ANSWER
-                # =========================================
+                st.write(retry_answer)
 
-                st.write(answer)
+                # Save the successful reply only
+                conversation_history.append({
+                    "role": "assistant",
+                    "content": retry_answer
+                })
 
-                # =========================================
-                # GENERATE CHARACTER VOICE
-                # =========================================
+                # Clear retry data after success
+                st.session_state["pending_retry_message"] = None
+                st.session_state["pending_retry_character"] = None
 
-                audio = (
-                    generate_character_voice(
-                        character,
-                        answer
-                    )
+                # Generate the character's voice
+                retry_audio = generate_character_voice(
+                    character,
+                    retry_answer
                 )
 
-                if audio:
-
-                    prepare_audio(
-                        audio,
-                        character
-                    )
-
+                if retry_audio:
+                    prepare_audio(retry_audio, character)
                     play_character_audio()
 
-                 
-        # =====================================================
-        # SAVE CHARACTER ANSWER — CHARACTER-SPECIFIC HISTORY
-        # =====================================================
-
-        conversation_history.append(
-            {
-                "role": "assistant",
-                "content": answer
-            }
-                )
+                # Refresh to show the completed conversation
+                st.rerun()
 
 
     # =====================================================
