@@ -366,7 +366,9 @@ def search_taxon_cached(search_name):
     except Exception as e:
         return {
             "error": str(e)
-        }# =========================================================
+        }
+
+# =========================================================
 # iNATURALIST OBSERVATIONS
 # =========================================================
 
@@ -462,8 +464,6 @@ GEMINI_MODELS = [
     "gemini-3.7-flash",
     "gemini-3.6-flash"
 ]
-
-
 # =========================================================
 # GEMINI IMAGE IDENTIFICATION
 # =========================================================
@@ -729,7 +729,8 @@ def show_species_page(
 
     st.markdown(
         "### *" + scientific_name + "*"
-        )
+    )
+
     # =====================================================
     # BASIC INFORMATION
     # =====================================================
@@ -1118,7 +1119,8 @@ def show_home():
     st.caption(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
-    )# =========================================================
+    ) 
+# =========================================================
 # AUDIO ARCHITECTURE
 # =========================================================
 
@@ -1555,8 +1557,7 @@ def voice_input_test():
         None
     )
 
-    return voice_text
-                # =========================================================
+    return voice_text# =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
@@ -1679,7 +1680,9 @@ If the user says something scientifically incorrect,
 gently correct them.
 
 Do not blindly agree with the user.
-"""# =====================================================
+"""
+
+    # =====================================================
     # BUILD CONVERSATION HISTORY
     # =====================================================
 
@@ -1852,6 +1855,34 @@ def show_conversation():
 
     conversation_history = st.session_state[conversation_key]
 
+    # Process chat UI actions BEFORE creating widgets. Streamlit forbids
+    # changing a widget's keyed state after that widget has been rendered.
+    action_key = f"_pending_chat_action_{character}"
+    pending_action = st.session_state.pop(action_key, None)
+    if pending_action:
+        action_type = pending_action.get("type")
+        title_key = f"chat_title_{character}"
+        if action_type == "load":
+            selected_chat = pending_action["chat"]
+            st.session_state[conversation_key] = selected_chat.get("messages", [])
+            st.session_state.current_chat_ids[character] = selected_chat.get("chat_id")
+            st.session_state[title_key] = selected_chat.get("title", "")
+            st.session_state[pending_key] = None
+        elif action_type == "new":
+            st.session_state[conversation_key] = []
+            st.session_state.current_chat_ids[character] = None
+            st.session_state[title_key] = ""
+            st.session_state[pending_key] = None
+        elif action_type == "rename":
+            st.session_state[title_key] = pending_action.get("title", "")
+        elif action_type == "deleted_current":
+            st.session_state[conversation_key] = []
+            st.session_state.current_chat_ids[character] = None
+            st.session_state[title_key] = ""
+            st.session_state[pending_key] = None
+
+    conversation_history = st.session_state[conversation_key]
+
     # Character display details were assigned safely at the top of this function.
 
     # -----------------------------------------------------
@@ -1863,6 +1894,10 @@ def show_conversation():
 
     st.title(f"{character_icon} Talk to {character_name}")
     st.caption(f"Talk to {character_name} about anything.")
+    if st.button(f"🗣️ Speak with {character_name} in a 🌌 voice space", key=f"open_voice_space_{character}", use_container_width=True):
+        st.session_state.page = "voice"
+        st.session_state.active_character = character
+        st.rerun()
 
     # -----------------------------------------------------
     # 3A. SAVED CHAT HISTORY — SEARCH, LOAD, RENAME, SAVE, DELETE
@@ -1894,10 +1929,7 @@ def show_conversation():
                     st.error("Could not save chat: " + str(error))
         with new_col:
             if st.button("➕ New chat", key=f"new_chat_{character}", use_container_width=True):
-                st.session_state[conversation_key] = []
-                st.session_state.current_chat_ids[character] = None
-                st.session_state[pending_key] = None
-                st.session_state[title_key] = ""
+                st.session_state[action_key] = {"type": "new"}
                 st.rerun()
 
         saved_chats, history_error = get_saved_chats(character)
@@ -1935,10 +1967,7 @@ def show_conversation():
                 load_col, rename_col, delete_col = st.columns(3)
                 with load_col:
                     if st.button("📂 Open chat", key=f"load_chat_{character}", use_container_width=True):
-                        st.session_state[conversation_key] = selected_chat["messages"]
-                        st.session_state.current_chat_ids[character] = selected_chat["chat_id"]
-                        st.session_state[title_key] = selected_chat["title"]
-                        st.session_state[pending_key] = None
+                        st.session_state[action_key] = {"type": "load", "chat": selected_chat}
                         st.rerun()
                 with rename_col:
                     if st.button("✏️ Rename", key=f"rename_chat_{character}", use_container_width=True):
@@ -1948,7 +1977,10 @@ def show_conversation():
                         )
                         if ok:
                             if st.session_state.current_chat_ids.get(character) == selected_chat["chat_id"]:
-                                st.session_state[title_key] = st.session_state.get(rename_key, "").strip()
+                                st.session_state[action_key] = {
+                                    "type": "rename",
+                                    "title": st.session_state.get(rename_key, "").strip()
+                                }
                             st.success("Session renamed.")
                             st.rerun()
                         else:
@@ -1958,9 +1990,7 @@ def show_conversation():
                         ok, error = delete_chat_from_supabase(selected_chat["chat_id"])
                         if ok:
                             if st.session_state.current_chat_ids.get(character) == selected_chat["chat_id"]:
-                                st.session_state.current_chat_ids[character] = None
-                                st.session_state[conversation_key] = []
-                                st.session_state[title_key] = ""
+                                st.session_state[action_key] = {"type": "deleted_current"}
                             st.success("Session deleted.")
                             st.rerun()
                         else:
@@ -2070,9 +2100,7 @@ def show_conversation():
                 if saved_ok:
                     st.session_state.current_chat_ids[character] = saved_id
                 else:
-                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
-
-    # -----------------------------------------------------
+                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))# -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -2146,7 +2174,8 @@ def show_conversation():
                         st.warning("Retry worked, but Supabase save failed: " + str(saved_error))
 
                     # Refresh to render the saved answer in chat history.
-                    st.rerun()# -----------------------------------------------------
+                    st.rerun()
+        # -----------------------------------------------------
     # 8. Voice settings
     # -----------------------------------------------------
     st.divider()
@@ -2163,6 +2192,98 @@ def show_conversation():
         st.caption("🔇 Character voice is turned off.")
 
  # =========================================================
+# =========================================================
+# VOICE-ONLY SPACE — animated avatar + spoken conversation
+# Replies are played as audio and are not printed as chat text.
+# =========================================================
+def show_voice_space():
+    character = st.session_state.get("active_character", "gogy")
+    if character not in ("gogy", "titli"):
+        character = "gogy"
+    character_name = "Titli" if character == "titli" else "Gogy"
+    emoji = "🙋🏼‍♀️" if character == "titli" else "🙋🏻‍♂️"
+    conversation_key = f"{character}_conversation"
+    if conversation_key not in st.session_state:
+        st.session_state[conversation_key] = []
+
+    if st.button("← Back to chat", key="back_from_voice_space"):
+        st.session_state.page = "conversation"
+        st.rerun()
+
+    st.title(f"🌌 Voice Space with {character_name}")
+    st.caption("Speak using the microphone. Replies are spoken aloud; text replies are hidden.")
+    st.markdown("""
+    <style>
+    .voice-stage { min-height: 250px; border-radius: 28px; padding: 24px 12px;
+        text-align:center; background: radial-gradient(circle at 50% 35%, #45317d, #15152e 65%, #080814);
+        color:white; overflow:hidden; }
+    .voice-avatar { font-size: 100px; display:inline-block; animation: bob 1.2s ease-in-out infinite; }
+    .voice-stars { font-size: 24px; letter-spacing: 14px; animation: twinkle 1.5s ease-in-out infinite alternate; }
+    .voice-speaking { font-size: 15px; margin-top: 8px; opacity:.9; }
+    @keyframes bob { 0%,100% { transform:translateY(0) rotate(-3deg); } 50% { transform:translateY(-12px) rotate(3deg); } }
+    @keyframes twinkle { from { opacity:.35; } to { opacity:1; } }
+    </style>
+    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="voice-stage"><div class="voice-stars">✦ · ✧ · ✦</div>'
+        f'<div class="voice-avatar">{emoji}</div>'
+        f'<h2 style="color:white">{character_name}</h2>'
+        f'<div class="voice-speaking">✨ Listening for your question… ✨</div></div>',
+        unsafe_allow_html=True
+    )
+
+    greeting_key = f"voice_greeting_done_{character}"
+    if not st.session_state.get(greeting_key):
+        greeting = (
+            "Ooooh, hiii! I'm Titli! What would you like to discover today?"
+            if character == "titli"
+            else "Hiii! I'm Gogy! What would you like to know today?"
+        )
+        try:
+            audio = generate_character_voice(character, greeting)
+            if audio:
+                st.audio(audio, format="audio/mp3", autoplay=True)
+            else:
+                st.info("The greeting voice isn't configured yet. Check the voice API settings.")
+        except Exception:
+            st.info("Voice greeting could not play right now. Check the voice API settings.")
+        st.session_state[greeting_key] = True
+
+    voice_text = voice_input_test()
+    if voice_text and str(voice_text).strip():
+        user_message = str(voice_text).strip()
+        history = st.session_state[conversation_key]
+        history.append({"role": "user", "content": user_message})
+        with st.spinner(f"{character_name} is thinking…"):
+            answer = ask_character_ai(character, user_message, history[:-1])
+        if answer:
+            answer = str(answer).strip()
+            history.append({"role": "assistant", "content": answer})
+            try:
+                audio = generate_character_voice(character, answer)
+                if audio:
+                    st.audio(audio, format="audio/mp3", autoplay=True)
+                else:
+                    st.warning("I couldn't generate speech. Check the ElevenLabs voice settings.")
+            except Exception:
+                st.warning("I couldn't play the spoken reply. You can return to chat mode.")
+            active_id = st.session_state.current_chat_ids.get(character)
+            if active_id:
+                ok, _, err = save_chat_to_supabase(
+                    character, history, active_id,
+                    st.session_state.get(f"chat_title_{character}", "").strip() or None
+                )
+                if not ok:
+                    st.warning("Voice reply was not saved to Supabase: " + str(err))
+        else:
+            st.warning(f"{character_name} couldn't answer right now. Please try again.")
+
+    st.caption("Tip: tap the microphone, allow browser microphone access, and speak clearly.")
+    if st.button("💬 Return to text chat", key="return_to_text_chat", use_container_width=True):
+        st.session_state.page = "conversation"
+        st.rerun()
+
+
 # SEARCH PAGE
 # =========================================================
 
@@ -2365,9 +2486,7 @@ def show_identify():
 
             st.session_state.selected_taxon = None
 
-            st.session_state.selected_observations = []
-
-    # =====================================================
+            st.session_state.selected_observations = []# =====================================================
     # DISPLAY IMAGE
     # =====================================================
 
@@ -2595,7 +2714,9 @@ def show_identify():
                                 "The organism was identified, "
                                 "but no matching iNaturalist "
                                 "taxon was found."
-                             )# =============================================
+                            )
+
+            # =============================================
             # SPECIES PAGE
             # =============================================
 
@@ -2666,6 +2787,7 @@ PAGE_ROUTES = {
     "conversation": show_conversation,
     "gogy": show_conversation,
     "titli": show_conversation,
+    "voice": show_voice_space,
 }
 
 # ============================================================
@@ -2690,7 +2812,7 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 # Render the selected page.
 page_function()
 
-    
-    
         
-        
+
+    
+      
