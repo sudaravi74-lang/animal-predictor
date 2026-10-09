@@ -69,13 +69,23 @@ for key, value in defaults.items():
 
 # =========================================================
 # SUPABASE CHAT STORAGE
-# Uses SUPABASE_DB_URL from Streamlit Secrets.
-# Chats are scoped to this Streamlit session for privacy.
-# A real public multi-user app should add user authentication.
+# Uses a stable browser token in the URL so saved chats survive refresh.
+# IMPORTANT: add real user authentication before publishing publicly.
 # =========================================================
 
-if "chat_session_id" not in st.session_state:
-    st.session_state.chat_session_id = str(uuid.uuid4())
+# Preserve the same chat owner when this browser refreshes the app.
+# The token is a locator, NOT a replacement for secure authentication.
+try:
+    _chat_owner = st.query_params.get("chat_owner")
+except Exception:
+    _chat_owner = None
+if not _chat_owner:
+    _chat_owner = str(uuid.uuid4())
+    try:
+        st.query_params["chat_owner"] = _chat_owner
+    except Exception:
+        pass
+st.session_state.chat_session_id = str(_chat_owner)
 
 if "current_chat_ids" not in st.session_state:
     st.session_state.current_chat_ids = {"gogy": None, "titli": None}
@@ -117,7 +127,7 @@ def ensure_chat_table():
         connection.close()
 
 
-def save_chat_to_supabase(character, messages, chat_id=None):
+def save_chat_to_supabase(character, messages, chat_id=None, custom_title=None):
     """Insert/update one chat. Returns (success, chat_id, error_message)."""
     if not messages:
         return False, chat_id, "There are no messages to save yet."
@@ -132,7 +142,9 @@ def save_chat_to_supabase(character, messages, chat_id=None):
              if item.get("role") == "user" and str(item.get("content", "")).strip()),
             "Conversation with " + character.capitalize()
         )
-        title = first_user_message[:80]
+        title = (str(custom_title).strip() if custom_title else first_user_message)[:120]
+        if not title:
+            title = first_user_message[:120]
         with connection:
             with connection.cursor() as cursor:
                 if chat_id:
@@ -178,7 +190,7 @@ def get_saved_chats(character):
                 FROM nature_ai_chats
                 WHERE session_id = %s AND character = %s
                 ORDER BY updated_at DESC
-                LIMIT 50
+                LIMIT 1000
             """, (st.session_state.chat_session_id, character))
             rows = cursor.fetchall()
         return [
@@ -230,7 +242,12 @@ INAT_OBSERVATIONS_URL = (
 
 HEADERS = {
     "User-Agent": "Nature-Encyclopedia-AI/1.0"
-    }# ==========================================
+}
+
+
+
+ 
+# ==========================================
 # iNATURALIST TAXON SEARCH
 # ==========================================
 
@@ -349,9 +366,7 @@ def search_taxon_cached(search_name):
     except Exception as e:
         return {
             "error": str(e)
-        }
-
-# =========================================================
+        }# =========================================================
 # iNATURALIST OBSERVATIONS
 # =========================================================
 
@@ -714,8 +729,8 @@ def show_species_page(
 
     st.markdown(
         "### *" + scientific_name + "*"
-            )
-        # =====================================================
+        )
+    # =====================================================
     # BASIC INFORMATION
     # =====================================================
 
@@ -1103,8 +1118,7 @@ def show_home():
     st.caption(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
-    ) 
-# =========================================================
+    )# =========================================================
 # AUDIO ARCHITECTURE
 # =========================================================
 
@@ -1541,7 +1555,8 @@ def voice_input_test():
         None
     )
 
-    return voice_text# =========================================================
+    return voice_text
+                # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
@@ -1664,9 +1679,7 @@ If the user says something scientifically incorrect,
 gently correct them.
 
 Do not blindly agree with the user.
-"""
-
-    # =====================================================
+"""# =====================================================
     # BUILD CONVERSATION HISTORY
     # =====================================================
 
@@ -1852,55 +1865,106 @@ def show_conversation():
     st.caption(f"Talk to {character_name} about anything.")
 
     # -----------------------------------------------------
-    # 3A. SAVED CHAT HISTORY — LOAD, SAVE, OR DELETE
+    # 3A. SAVED CHAT HISTORY — SEARCH, LOAD, RENAME, SAVE, DELETE
     # -----------------------------------------------------
-    with st.expander("🗂️ Chat History / Save / Delete", expanded=False):
-        if st.button("💾 Save this chat", key=f"save_chat_{character}", use_container_width=True):
-            ok, saved_id, error = save_chat_to_supabase(
-                character, conversation_history,
-                st.session_state.current_chat_ids.get(character)
-            )
-            if ok:
-                st.session_state.current_chat_ids[character] = saved_id
-                st.success("Chat saved to Supabase.")
+    with st.expander("🗂️ Chat History / Save / Rename / Delete", expanded=True):
+        title_key = f"chat_title_{character}"
+        if title_key not in st.session_state:
+            st.session_state[title_key] = ""
+
+        st.text_input(
+            "Session file name",
+            key=title_key,
+            placeholder="Example: Chat on dog",
+            help="Choose a name before saving. You can rename it later."
+        )
+        save_col, new_col = st.columns(2)
+        with save_col:
+            if st.button("💾 Save this entire chat", key=f"save_chat_{character}", use_container_width=True):
+                ok, saved_id, error = save_chat_to_supabase(
+                    character, conversation_history,
+                    st.session_state.current_chat_ids.get(character),
+                    st.session_state.get(title_key, "").strip() or None
+                )
+                if ok:
+                    st.session_state.current_chat_ids[character] = saved_id
+                    st.success("Entire conversation saved.")
+                    st.rerun()
+                else:
+                    st.error("Could not save chat: " + str(error))
+        with new_col:
+            if st.button("➕ New chat", key=f"new_chat_{character}", use_container_width=True):
+                st.session_state[conversation_key] = []
+                st.session_state.current_chat_ids[character] = None
+                st.session_state[pending_key] = None
+                st.session_state[title_key] = ""
                 st.rerun()
-            else:
-                st.error("Could not save chat: " + str(error))
 
         saved_chats, history_error = get_saved_chats(character)
         if history_error:
             st.warning("Chat history is unavailable: " + str(history_error))
         elif not saved_chats:
-            st.caption("No saved chats for this character in this session yet.")
+            st.caption("No saved chats for this character yet. Send messages, give the session a name, then save it.")
         else:
-            chat_labels = {
-                f"{item['title']} · {item['updated_at'].strftime('%d %b %Y %H:%M') if item['updated_at'] else 'Saved'} · {item['chat_id'][:8]}": item
-                for item in saved_chats
-            }
-            selected_label = st.selectbox(
-                "Saved conversations", list(chat_labels.keys()),
-                key=f"saved_chat_select_{character}"
-            )
-            load_col, delete_col = st.columns(2)
-            with load_col:
-                if st.button("📂 Load chat", key=f"load_chat_{character}", use_container_width=True):
-                    selected_chat = chat_labels[selected_label]
-                    st.session_state[conversation_key] = selected_chat["messages"]
-                    st.session_state.current_chat_ids[character] = selected_chat["chat_id"]
-                    st.session_state[pending_key] = None
-                    st.rerun()
-            with delete_col:
-                if st.button("🗑️ Delete chat", key=f"delete_chat_{character}", use_container_width=True):
-                    selected_chat = chat_labels[selected_label]
-                    ok, error = delete_chat_from_supabase(selected_chat["chat_id"])
-                    if ok:
-                        if st.session_state.current_chat_ids.get(character) == selected_chat["chat_id"]:
-                            st.session_state.current_chat_ids[character] = None
-                            st.session_state[conversation_key] = []
-                        st.success("Chat deleted.")
+            search_term = st.text_input(
+                "🔎 Search saved sessions by name or message",
+                key=f"search_saved_chats_{character}",
+                placeholder="Example: Chat on dog"
+            ).strip().casefold()
+            filtered_chats = [
+                item for item in saved_chats
+                if not search_term
+                or search_term in str(item.get("title", "")).casefold()
+                or any(search_term in str(m.get("content", "")).casefold() for m in item.get("messages", []))
+            ]
+            if not filtered_chats:
+                st.info("No saved sessions match that search.")
+            else:
+                chat_labels = {
+                    f"{item['title']} · {item['updated_at'].strftime('%d %b %Y %H:%M') if item['updated_at'] else 'Saved'} · {item['chat_id'][:8]}": item
+                    for item in filtered_chats
+                }
+                selected_label = st.selectbox(
+                    f"Saved sessions ({len(filtered_chats)})",
+                    list(chat_labels.keys()),
+                    key=f"saved_chat_select_{character}"
+                )
+                selected_chat = chat_labels[selected_label]
+                rename_key = f"rename_title_{character}"
+                st.text_input("Rename selected session", value=selected_chat["title"], key=rename_key)
+                load_col, rename_col, delete_col = st.columns(3)
+                with load_col:
+                    if st.button("📂 Open chat", key=f"load_chat_{character}", use_container_width=True):
+                        st.session_state[conversation_key] = selected_chat["messages"]
+                        st.session_state.current_chat_ids[character] = selected_chat["chat_id"]
+                        st.session_state[title_key] = selected_chat["title"]
+                        st.session_state[pending_key] = None
                         st.rerun()
-                    else:
-                        st.error("Could not delete chat: " + str(error))
+                with rename_col:
+                    if st.button("✏️ Rename", key=f"rename_chat_{character}", use_container_width=True):
+                        ok, renamed_id, error = save_chat_to_supabase(
+                            character, selected_chat["messages"], selected_chat["chat_id"],
+                            st.session_state.get(rename_key, "").strip()
+                        )
+                        if ok:
+                            if st.session_state.current_chat_ids.get(character) == selected_chat["chat_id"]:
+                                st.session_state[title_key] = st.session_state.get(rename_key, "").strip()
+                            st.success("Session renamed.")
+                            st.rerun()
+                        else:
+                            st.error("Could not rename session: " + str(error))
+                with delete_col:
+                    if st.button("🗑️ Delete", key=f"delete_chat_{character}", use_container_width=True):
+                        ok, error = delete_chat_from_supabase(selected_chat["chat_id"])
+                        if ok:
+                            if st.session_state.current_chat_ids.get(character) == selected_chat["chat_id"]:
+                                st.session_state.current_chat_ids[character] = None
+                                st.session_state[conversation_key] = []
+                                st.session_state[title_key] = ""
+                            st.success("Session deleted.")
+                            st.rerun()
+                        else:
+                            st.error("Could not delete chat: " + str(error))
 
     # -----------------------------------------------------
     # 4. Render greeting and existing conversation
@@ -1976,6 +2040,17 @@ def show_conversation():
                     })
                     st.session_state[pending_key] = None
 
+                    # If this conversation was already saved, update that same session
+                    # so the entire new exchange persists without creating a one-message file.
+                    active_saved_id = st.session_state.current_chat_ids.get(character)
+                    if active_saved_id:
+                        auto_ok, _, auto_error = save_chat_to_supabase(
+                            character, conversation_history, active_saved_id,
+                            st.session_state.get(f"chat_title_{character}", "").strip() or None
+                        )
+                        if not auto_ok:
+                            st.warning("Reply received, but updating the saved session failed: " + str(auto_error))
+
                     # Voice errors must not break the text conversation.
                     if st.session_state.get("audio_enabled", True):
                         try:
@@ -1996,7 +2071,8 @@ def show_conversation():
                     st.session_state.current_chat_ids[character] = saved_id
                 else:
                     st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
-        # -----------------------------------------------------
+
+    # -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -2070,8 +2146,7 @@ def show_conversation():
                         st.warning("Retry worked, but Supabase save failed: " + str(saved_error))
 
                     # Refresh to render the saved answer in chat history.
-                    st.rerun()
-        # -----------------------------------------------------
+                    st.rerun()# -----------------------------------------------------
     # 8. Voice settings
     # -----------------------------------------------------
     st.divider()
@@ -2520,9 +2595,7 @@ def show_identify():
                                 "The organism was identified, "
                                 "but no matching iNaturalist "
                                 "taxon was found."
-                            )
-
-            # =============================================
+                             )# =============================================
             # SPECIES PAGE
             # =============================================
 
@@ -2618,3 +2691,6 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 page_function()
 
     
+    
+        
+        
