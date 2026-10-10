@@ -596,15 +596,8 @@ except Exception as setup_exc:
 
 GEMINI_MODELS = [
     "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    
-    
+                                          
 ]
 
 
@@ -1758,10 +1751,7 @@ def voice_input_test():
 # GOGGY & TITLI AI — DIRECT GEMINI CONNECTION
 # Replaces only ask_character_ai(); keeps the rest of app.py
 # =========================================================    # CHANGE 2: Always provide Goggy and Titli with today's real date.
-    # Use Indian Standard Time so the date is correct for users in India.
-    current_india_datetime = datetime.now(
-        ZoneInfo("Asia/Kolkata")
-    ).strftime("%A, %d %B %Y, %I:%M %p IST")
+    
 
 def ask_character_ai(
     character,
@@ -1769,6 +1759,11 @@ def ask_character_ai(
     conversation_history,
     image_bytes=None
 ):
+    # CHANGE 2: Get the current date and time in India.
+    current_india_datetime = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    ).strftime("%A, %d %B %Y, %I:%M %p IST")
+    
     if gemini_client is None:
         error = (
             GEMINI_SETUP_ERROR
@@ -1868,14 +1863,14 @@ Reply as {character.capitalize()}.
             st.session_state["character_ai_error"] = error
             print("[Goggy & Titli] " + error)
             return "I couldn't read that photo. Please upload it again."
+    # CHANGE 2: Try the main model first, then the backup.
+    models_to_try = [
+        "gemini-3.8-flash",
+        "gemini-3.5-flash-lite",
+                ]
+    
 
-    # Try available Gemini models without Google Search tools
-    models_to_try = list(dict.fromkeys(
-        GEMINI_MODELS + [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-        ]
-    ))
+
 
     errors = []
 
@@ -2279,12 +2274,32 @@ def show_conversation():
                     except Exception as exc:
                         st.session_state["character_ai_error"] = str(exc)
                         retry_answer = None
-
+                # CHANGE 3: Show the error if Goggy or Titli cannot reply.
                 if not retry_answer:
                     st.warning(
                         f"{character_name} still couldn't answer. "
                         "Your message is still saved. Please retry again."
                     )
+
+                    # CHANGE 3A: Open this panel to see the real Gemini error.
+                    # This helps us identify API key, quota, model, or connection issues.
+                    with st.expander("🔧 Technical error — troubleshooting"):
+                        st.code(
+                            str(
+                                st.session_state.get(
+                                    "character_ai_error",
+                                    "No detailed error was recorded."
+                                )
+                            )
+                        )
+
+                # Keep the existing successful-answer code unchanged.
+                else:
+                    retry_answer = str(retry_answer).strip()
+                    st.write(retry_answer)
+                    
+
+                 
                 else:
                     retry_answer = str(retry_answer).strip()
                     st.write(retry_answer)
