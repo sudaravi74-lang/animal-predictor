@@ -703,9 +703,7 @@ def show_species_page(
     organism_type = determine_organism_type(
         taxon,
         ai_result
-    )
-
-    # =====================================================
+)# =====================================================
     # HEADER
     # =====================================================
 
@@ -729,7 +727,9 @@ def show_species_page(
 
     st.markdown(
         "### *" + scientific_name + "*"
-)# =====================================================
+    )
+
+    # =====================================================
     # BASIC INFORMATION
     # =====================================================
 
@@ -1117,8 +1117,7 @@ def show_home():
     st.caption(
         "🌿 Biodiversity data and photographs "
         "are retrieved from iNaturalist."
-    ) 
-# =========================================================
+)# =========================================================
 # AUDIO ARCHITECTURE
 # =========================================================
 
@@ -1244,7 +1243,10 @@ def speak_character_text(character, text):
     }})();
     </script></body></html>
     """
-    st.components.v1.html(html, height=28, scrolling=False)# =========================================================
+    st.components.v1.html(html, height=28, scrolling=False)
+
+
+# =========================================================
 # 🎙️ REAL VOICE INPUT — SPEECH RECOGNITION
 # =========================================================
 #
@@ -1740,9 +1742,7 @@ Do not blindly agree with the user.
                 + ": "
                 + str(content)
                 + "\n"
-            )
-
-    # =====================================================
+    )# =====================================================
     # GEMINI PROMPT
     # =====================================================
 
@@ -1908,7 +1908,9 @@ def show_conversation():
 
     conversation_history = st.session_state[conversation_key]
 
-    # Character display details were assigned safely at the top of this function.# -----------------------------------------------------
+    # Character display details were assigned safely at the top of this function.
+
+    # -----------------------------------------------------
     # 3. Navigation and character header
     # -----------------------------------------------------
     if st.button("← Home", key="conversation_home"):
@@ -1920,9 +1922,7 @@ def show_conversation():
     if st.button(f"🗣️ Speak with {character_name} in a 🌌 voice space", key=f"open_voice_space_{character}", use_container_width=True):
         st.session_state.page = "voice"
         st.session_state.active_character = character
-        st.rerun()
-
-    # -----------------------------------------------------
+        st.rerun()# -----------------------------------------------------
     # 3A. SAVED CHAT HISTORY — SEARCH, LOAD, RENAME, SAVE, DELETE
     # -----------------------------------------------------
     with st.expander("🗂️ Chat History / Save / Rename / Delete", expanded=True):
@@ -2117,7 +2117,9 @@ def show_conversation():
                 if saved_ok:
                     st.session_state.current_chat_ids[character] = saved_id
                 else:
-                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))# -----------------------------------------------------
+                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
+
+    # -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -2183,8 +2185,7 @@ def show_conversation():
                         st.warning("Retry worked, but Supabase save failed: " + str(saved_error))
 
                     # Refresh to render the saved answer in chat history.
-                    st.rerun()
-        # -----------------------------------------------------
+                    st.rerun()# -----------------------------------------------------
     # 8. Voice settings
     # -----------------------------------------------------
     st.divider()
@@ -2640,7 +2641,10 @@ def show_identify():
 
                 st.caption(
                     "AI model: "
-                    + st.session_state.ai_model_used# =============================================
+                    + st.session_state.ai_model_used
+                )
+
+            # =============================================
             # FIND iNATURALIST SPECIES
             # =============================================
 
@@ -2807,9 +2811,3 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 
 # Render the selected page.
 page_function()
-
-    
-        )
-            
-                
-                               
