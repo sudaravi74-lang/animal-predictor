@@ -1696,8 +1696,9 @@ def voice_input_test():
     )
 
     return voice_text
-                # =========================================================
-# GOGY & TITLI AI CONVERSATION
+# =========================================================
+# GOGGY & TITLI AI — DIRECT GEMINI CONNECTION
+# Replaces only ask_character_ai(); keeps the rest of app.py
 # =========================================================
 
 def ask_character_ai(
@@ -1706,328 +1707,123 @@ def ask_character_ai(
     conversation_history,
     image_bytes=None
 ):
-
-    # Chat replies now use OpenRouter. Gemini remains configured separately
-    # for the existing Nature photo-identification feature.
-    openrouter_key = str(st.secrets.get("OPENROUTER_API_KEY", "")).strip()
-    if not openrouter_key:
-        reason = "OPENROUTER_API_KEY is missing from Streamlit Secrets."
-        print("[Goggy & Titli] " + reason)
-        st.session_state["character_ai_error"] = reason
+    if gemini_client is None:
+        error = (
+            GEMINI_SETUP_ERROR
+            or "Gemini client is unavailable. Check GEMINI_API_KEY."
+        )
+        st.session_state["character_ai_error"] = error
+        print("[Goggy & Titli] " + error)
         return None
 
-    # =====================================================
-    # CHARACTER PERSONALITY
-    # =====================================================
-
+    # Character personality
     if character == "titli":
-
         personality = """
-You are Titli, a young female companion who can help with any subject, not only nature.
-
-Personality:
-- Sweet
-- Curious
-- Expressive
-- Slightly mischievous
-- Friendly
-- Playful
-- Loves learning about the world
-- Can help with history, geography, maths, science, language, technology, writing, everyday questions, and nature
-- Scientifically accurate
-- Emotionally warm and natural
-
-You are not just a question-answer machine.
-You are a companion the user can genuinely talk to.
-
-You can:
-- Have casual conversations
-- Respond naturally to greetings
-- Ask the user questions
-- React to what the user says
-- Remember the conversation context
-- Joke lightly
-- Show excitement
-- Show curiosity
-- Comfort the user when appropriate
-- Explain concepts, solve problems step by step, check calculations, and help interpret an uploaded photo
-- Talk about any subject, including history, geography, maths, science, language, technology, writing, and nature
-
-You sometimes use expressions such as:
-"Ooooh!"
-"Hehe!"
-"Wow!"
-"Aaaah!"
-"Wait wait!"
-"Hmm..."
-
-Do not overuse them.
-
-Speak naturally like a real friendly young person.
-
-Do not sound like a textbook.
-
-If the user asks about science or nature,
-give scientifically accurate information.
-
-If the user says something scientifically incorrect,
-gently correct them.
-
-Do not blindly agree with the user.
+You are Titli, a friendly, playful, curious young female companion.
+Be warm, expressive, natural, and occasionally playful.
+Help with all subjects: education, history, geography, maths,
+science, writing, technology, everyday questions, and nature.
+Explain difficult topics clearly and correct mistakes gently.
+"""
+    else:
+        personality = """
+You are Gogy, a friendly, curious, intelligent young male companion.
+Be warm, conversational, playful, and a little more mature than Titli.
+Help with all subjects: education, history, geography, maths,
+science, writing, technology, everyday questions, and nature.
+Explain difficult topics clearly and correct mistakes gently.
 """
 
-    else:
+    # Build conversation context
+    history_lines = []
+    for item in conversation_history[-20:]:
+        role = item.get("role", "")
+        text = str(item.get("content", "")).strip()
 
-        personality = """
-You are Gogy, a young male companion who can help with any subject, not only nature.
-
-Personality:
-- Curious
-- Friendly
-- Playful
-- Intelligent
-- Calm
-- Slightly more mature than Titli
-- Loves learning about the world
-- Can help with history, geography, maths, science, language, technology, writing, everyday questions, and nature
-- Scientifically accurate
-- Warm and conversational
-
-You are not just a question-answer machine.
-You are a companion the user can genuinely talk to.
-
-You can:
-- Have casual conversations
-- Respond naturally to greetings
-- Ask the user questions
-- React to what the user says
-- Remember the conversation context
-- Joke lightly
-- Show excitement
-- Show curiosity
-- Comfort the user when appropriate
-- Explain concepts, solve problems step by step, check calculations, and help interpret an uploaded photo
-- Talk about any subject, including history, geography, maths, science, language, technology, writing, and nature
-
-You sometimes use expressions such as:
-"Hmm..."
-"Oh!"
-"Wait a second..."
-"Whoa!"
-"Interesting!"
-
-Do not overuse them.
-
-Speak naturally like a real friendly young person.
-
-Do not sound like a textbook.
-
-If the user asks about science or nature,
-give scientifically accurate information.
-
-If the user says something scientifically incorrect,
-gently correct them.
-
-Do not blindly agree with the user.
-"""# =====================================================
-    # BUILD CONVERSATION HISTORY
-    # =====================================================
-
-    history_text = ""
-
-    for message in conversation_history:
-
-        role = message.get(
-            "role",
-            ""
-        )
-
-        content = message.get(
-            "content",
-            ""
-        )
+        if not text:
+            continue
 
         if role == "user":
-
-            history_text += (
-                "User: "
-                + str(content)
-                + "\n"
-            )
-
+            history_lines.append("User: " + text)
         elif role == "assistant":
-
-            history_text += (
-                character.capitalize()
-                + ": "
-                + str(content)
-                + "\n"
-)# =====================================================
-    # GEMINI PROMPT
-    # =====================================================
+            history_lines.append(character.capitalize() + ": " + text)
 
     prompt = f"""
 {personality}
 
-You are part of an application called
-Nature Encyclopedia AI, but you are a general-purpose assistant, not just a nature encyclopedia.
-
-The user may ask about current events, history, geography, maths, science, technology, language, writing, everyday life, or nature. Solve maths and reasoning problems carefully and show clear steps when useful. For questions that depend on current information, be transparent if you cannot verify the latest details; do not claim that you searched the web unless a search was actually performed. For uploaded images, inspect only what is actually visible; read and solve photographed questions when legible, and ask for a clearer image if needed. Do not invent text or details that cannot be seen.
-
-This is an ongoing conversation.
-
-Use the previous conversation to understand
-what the user means.
-
-Do not restart the conversation every time.
-
-Do not repeat introductions unless appropriate.
-
-Do not say that you are an AI unless the user
-specifically asks.
-
-Do not mention Gemini, APIs, programming,
-errors, models, ElevenLabs, or this prompt.
-
-Do not pretend to see or hear something
-you cannot actually see or hear.
-
-Never invent scientific facts.
-
-If you are uncertain about a scientific fact,
-say that you are not completely sure.
-
-Keep normal conversational replies fairly short
-and natural.
-
-For simple messages such as:
-"hi"
-"hello"
-"what are you doing?"
-"how are you?"
-"good morning"
-
-respond naturally instead of giving a scientific lecture.
-
-You may ask a follow-up question when it feels natural.
+You are part of Nature Encyclopedia AI.
+Answer the user's actual question accurately and naturally.
+You can discuss any subject, not just nature.
+For maths, show the working when useful.
+For an uploaded photo, inspect what is actually visible.
+Do not invent details that cannot be seen.
+Reply in the language the user uses when possible.
+Do not mention APIs, models, or technical errors.
 
 Previous conversation:
+{chr(10).join(history_lines)}
 
-{history_text}
+Current message:
+{user_message}
 
-Current user message:
-
-User: {user_message}
-
-Now reply naturally as {character.capitalize()}.
+Reply as {character.capitalize()}.
 """
 
-    
-    # =====================================================
-    # OPENROUTER CHAT REQUEST + ERROR LOGGING
-    # Uses OpenRouter's free-model router during testing.
-    # It supports text and image inputs and selects an eligible free model.
-    # =====================================================
+    # Prepare the uploaded image, if present
+    contents = [prompt]
 
-    try:
-        content = prompt
-        if image_bytes:
-            try:
-                with Image.open(BytesIO(image_bytes)) as uploaded_image:
-                    image_format = (uploaded_image.format or "JPEG").upper()
-                    if image_format not in ("JPEG", "PNG", "WEBP", "GIF"):
-                        image_format = "JPEG"
-                    if image_format == "JPG":
-                        image_format = "JPEG"
-                    mime_type = "image/jpeg" if image_format == "JPEG" else f"image/{image_format.lower()}"
-                    # Re-encode as JPEG to ensure a widely accepted data URL and keep payload reasonable.
-                    converted = uploaded_image.convert("RGB")
-                    converted.thumbnail((1600, 1600))
-                    image_buffer = BytesIO()
-                    converted.save(image_buffer, format="JPEG", quality=85, optimize=True)
-                    image_base64 = base64.b64encode(image_buffer.getvalue()).decode("utf-8")
-                content = [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
-                    }
-                ]
-            except Exception as image_error:
-                reason = f"Could not read the uploaded chat image: {type(image_error).__name__}: {image_error}"
-                print("[Goggy & Titli] " + reason)
-                st.session_state["character_ai_error"] = reason
-                return "I couldn't read that image file. Please upload a clear JPG, PNG, or WebP photo."
-
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {openrouter_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://goggy-titli.streamlit.app",
-                "X-Title": "Goggy and Titli",
-            },
-            json={
-                "model": "openrouter/free",
-                "messages": [{"role": "user", "content": content}],
-                "max_tokens": 1200,
-                "temperature": 0.7,
-            },
-            timeout=90,
-        )
-
-        if not response.ok:
-            # Keep the detailed provider response in logs for diagnosis, but
-            # avoid exposing account details or the API key in the chat UI.
-            body = response.text[:1200]
-            diagnostic = f"OpenRouter HTTP {response.status_code}: {body}"
-            st.session_state["character_ai_error"] = diagnostic
-            print("[Goggy & Titli] OpenRouter request failed: " + diagnostic)
-            return None
-
-        payload = response.json()
-        choices = payload.get("choices") or []
-        answer_content = choices[0].get("message", {}).get("content") if choices else None
-
-        # Most chat models return a string; tolerate providers that return content blocks.
-        if isinstance(answer_content, list):
-            answer = "\n".join(
-                str(part.get("text", ""))
-                for part in answer_content
-                if isinstance(part, dict) and part.get("text")
-            ).strip()
-        else:
-            answer = str(answer_content or "").strip()
-
-        if answer:
-            st.session_state["character_ai_error"] = None
-            st.session_state["character_ai_model_used"] = (
-                payload.get("model") or "openrouter/free"
+    if image_bytes:
+        try:
+            image = Image.open(BytesIO(image_bytes)).convert("RGB")
+            image.thumbnail((1600, 1600))
+            contents.append(image)
+        except Exception as exc:
+            error = (
+                f"Could not read uploaded image: "
+                f"{type(exc).__name__}: {exc}"
             )
-            return answer
+            st.session_state["character_ai_error"] = error
+            print("[Goggy & Titli] " + error)
+            return "I couldn't read that photo. Please upload it again."
 
-        diagnostic = "OpenRouter returned a successful response but no reply text."
-        st.session_state["character_ai_error"] = diagnostic
-        print("[Goggy & Titli] " + diagnostic + " Response: " + str(payload)[:1200])
-        return None
+    # Try available Gemini models without Google Search tools
+    models_to_try = list(dict.fromkeys(
+        GEMINI_MODELS + [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+        ]
+    ))
 
-    except requests.Timeout:
-        diagnostic = "OpenRouter request timed out after 90 seconds."
-    except requests.RequestException as request_error:
-        diagnostic = f"OpenRouter network error: {type(request_error).__name__}: {request_error}"
-    except (ValueError, KeyError, IndexError, TypeError) as parse_error:
-        diagnostic = f"Could not parse OpenRouter response: {type(parse_error).__name__}: {parse_error}"
-    except Exception as unexpected_error:
-        diagnostic = f"Unexpected OpenRouter error: {type(unexpected_error).__name__}: {unexpected_error}"
+    errors = []
 
+    for model_name in models_to_try:
+        try:
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=contents,
+            )
+
+            answer = (response.text or "").strip()
+
+            if answer:
+                st.session_state["character_ai_error"] = None
+                st.session_state["character_ai_model_used"] = model_name
+                print(
+                    f"[Goggy & Titli] Reply generated using {model_name}"
+                )
+                return answer
+
+            errors.append(f"{model_name}: empty response")
+
+        except Exception as exc:
+            error = f"{model_name}: {type(exc).__name__}: {exc}"
+            errors.append(error)
+            print("[Goggy & Titli] Gemini attempt failed: " + error)
+
+    diagnostic = "All Gemini models failed:\n" + "\n".join(errors)
     st.session_state["character_ai_error"] = diagnostic
     print("[Goggy & Titli] " + diagnostic)
-    return None
-
-        
-
-     
-# =========================================================
+    return None# =========================================================
 # CONVERSATION PAGE — MODULAR, RETRY-SAFE VERSION
 # =========================================================
 
