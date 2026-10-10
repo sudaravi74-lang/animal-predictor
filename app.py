@@ -609,9 +609,7 @@ Rules:
         if start != -1 and end != -1:
             text = text[start:end + 1]
 
-    return json.loads(text)
-
-# =========================================================
+    return json.loads(text)# =========================================================
 # GEMINI IDENTIFICATION
 # =========================================================
 
@@ -761,7 +759,7 @@ def show_species_page(
     organism_type = determine_organism_type(
         taxon,
         ai_result
-        )# =====================================================
+)# =====================================================
     # HEADER
     # =====================================================
 
@@ -1106,7 +1104,9 @@ def show_home():
                         "I couldn't find that organism."
                     )
 
-    st.divider()# =====================================================
+    st.divider()
+
+    # =====================================================
     # OTHER OPTIONS
     # =====================================================
 
@@ -1664,9 +1664,12 @@ def ask_character_ai(
     image_bytes=None
 ):
 
-    if gemini_client is None:
-        reason = GEMINI_SETUP_ERROR or "Gemini client is not configured."
-        print("[Goggy & Titli] Cannot send request: " + reason)
+    # Chat replies now use OpenRouter. Gemini remains configured separately
+    # for the existing Nature photo-identification feature.
+    openrouter_key = str(st.secrets.get("OPENROUTER_API_KEY", "")).strip()
+    if not openrouter_key:
+        reason = "OPENROUTER_API_KEY is missing from Streamlit Secrets."
+        print("[Goggy & Titli] " + reason)
         st.session_state["character_ai_error"] = reason
         return None
 
@@ -1816,7 +1819,7 @@ Do not blindly agree with the user.
                 + ": "
                 + str(content)
                 + "\n"
-    )# =====================================================
+)# =====================================================
     # GEMINI PROMPT
     # =====================================================
 
@@ -1826,7 +1829,7 @@ Do not blindly agree with the user.
 You are part of an application called
 Nature Encyclopedia AI, but you are a general-purpose assistant, not just a nature encyclopedia.
 
-The user may ask about current events, history, geography, maths, science, technology, language, writing, everyday life, or nature. Solve maths and reasoning problems carefully and show clear steps when useful. For questions that depend on current information, use the available Google Search tool when possible, prioritize reliable sources, distinguish verified facts from uncertainty, and never claim you searched if you did not. For uploaded images, inspect only what is actually visible; read and solve photographed questions when legible, and ask for a clearer image if needed. Do not invent text or details that cannot be seen.
+The user may ask about current events, history, geography, maths, science, technology, language, writing, everyday life, or nature. Solve maths and reasoning problems carefully and show clear steps when useful. For questions that depend on current information, be transparent if you cannot verify the latest details; do not claim that you searched the web unless a search was actually performed. For uploaded images, inspect only what is actually visible; read and solve photographed questions when legible, and ask for a clearer image if needed. Do not invent text or details that cannot be seen.
 
 This is an ongoing conversation.
 
@@ -1878,107 +1881,106 @@ Now reply naturally as {character.capitalize()}.
 
     
     # =====================================================
-    # GEMINI MODEL FALLBACK + GOOGLE SEARCH + ERROR LOGGING
+    # OPENROUTER CHAT REQUEST + ERROR LOGGING
+    # Uses OpenRouter's free-model router during testing.
+    # It supports text and image inputs and selects an eligible free model.
     # =====================================================
 
-    errors = []
-
-    # A photo is sent with the text prompt so the model can read worksheets,
-    # solve photographed maths problems, and describe visible objects.
-    request_contents = [prompt]
-    if image_bytes:
-        try:
-            request_contents.append(
-                Image.open(BytesIO(image_bytes)).convert("RGB")
-            )
-        except Exception as image_error:
-            print(f"[Goggy & Titli] Could not open chat image: {image_error}")
-            return "I couldn't read that image file. Please upload a clear JPG or PNG photo."
-
-    for model_name in GEMINI_MODELS:
-        try:
-            # First try with Google Search enabled for questions that benefit
-            # from fresh information.
-            response = gemini_client.models.generate_content(
-                model=model_name,
-                contents=request_contents,
-                config=types.GenerateContentConfig(
-                    tools=[
-                        types.Tool(
-                            google_search=types.GoogleSearch()
-                        )
-                    ]
-                )
-            )
-
-        except Exception as search_exc:
-            search_error = f"{type(search_exc).__name__}: {search_exc}"
-            errors.append(f"{model_name} (Google Search enabled): {search_error}")
-
-            # Some model/API-key combinations may reject the Search tool.
-            # In that case, retry this same model once without the tool
-            # before moving to the next fallback model.
-            search_error_lower = search_error.lower()
-            search_tool_problem = any(
-                marker in search_error_lower
-                for marker in (
-                    "google_search",
-                    "google search",
-                    "grounding",
-                    "unsupported tool",
-                    "tool is not supported",
-                    "tools are not supported",
-                    "tool use is not supported",
-                    "not supported for this model",
-                )
-            )
-
-            if not search_tool_problem:
-                continue
-
+    try:
+        content = prompt
+        if image_bytes:
             try:
-                response = gemini_client.models.generate_content(
-                    model=model_name,
-                    contents=request_contents
-                )
-            except Exception as plain_exc:
-                errors.append(
-                    f"{model_name} (without Search): "
-                    f"{type(plain_exc).__name__}: {plain_exc}"
-                )
-                continue
+                with Image.open(BytesIO(image_bytes)) as uploaded_image:
+                    image_format = (uploaded_image.format or "JPEG").upper()
+                    if image_format not in ("JPEG", "PNG", "WEBP", "GIF"):
+                        image_format = "JPEG"
+                    if image_format == "JPG":
+                        image_format = "JPEG"
+                    mime_type = "image/jpeg" if image_format == "JPEG" else f"image/{image_format.lower()}"
+                    # Re-encode as JPEG to ensure a widely accepted data URL and keep payload reasonable.
+                    converted = uploaded_image.convert("RGB")
+                    converted.thumbnail((1600, 1600))
+                    image_buffer = BytesIO()
+                    converted.save(image_buffer, format="JPEG", quality=85, optimize=True)
+                    image_base64 = base64.b64encode(image_buffer.getvalue()).decode("utf-8")
+                content = [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
+                    }
+                ]
+            except Exception as image_error:
+                reason = f"Could not read the uploaded chat image: {type(image_error).__name__}: {image_error}"
+                print("[Goggy & Titli] " + reason)
+                st.session_state["character_ai_error"] = reason
+                return "I couldn't read that image file. Please upload a clear JPG, PNG, or WebP photo."
 
-        answer = (
-            response.text.strip()
-            if response and response.text
-            else ""
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {openrouter_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://goggy-titli.streamlit.app",
+                "X-Title": "Goggy and Titli",
+            },
+            json={
+                "model": "openrouter/free",
+                "messages": [{"role": "user", "content": content}],
+                "max_tokens": 1200,
+                "temperature": 0.7,
+            },
+            timeout=90,
         )
+
+        if not response.ok:
+            # Keep the detailed provider response in logs for diagnosis, but
+            # avoid exposing account details or the API key in the chat UI.
+            body = response.text[:1200]
+            diagnostic = f"OpenRouter HTTP {response.status_code}: {body}"
+            st.session_state["character_ai_error"] = diagnostic
+            print("[Goggy & Titli] OpenRouter request failed: " + diagnostic)
+            return None
+
+        payload = response.json()
+        choices = payload.get("choices") or []
+        answer_content = choices[0].get("message", {}).get("content") if choices else None
+
+        # Most chat models return a string; tolerate providers that return content blocks.
+        if isinstance(answer_content, list):
+            answer = "\n".join(
+                str(part.get("text", ""))
+                for part in answer_content
+                if isinstance(part, dict) and part.get("text")
+            ).strip()
+        else:
+            answer = str(answer_content or "").strip()
 
         if answer:
             st.session_state["character_ai_error"] = None
+            st.session_state["character_ai_model_used"] = (
+                payload.get("model") or "openrouter/free"
+            )
             return answer
 
-        errors.append(f"{model_name}: Empty response text")
+        diagnostic = "OpenRouter returned a successful response but no reply text."
+        st.session_state["character_ai_error"] = diagnostic
+        print("[Goggy & Titli] " + diagnostic + " Response: " + str(payload)[:1200])
+        return None
 
-    
-    
-    # =====================================================
-    # ALL MODELS FAILED — LOG DIAGNOSTIC DETAILS
-    # =====================================================
+    except requests.Timeout:
+        diagnostic = "OpenRouter request timed out after 90 seconds."
+    except requests.RequestException as request_error:
+        diagnostic = f"OpenRouter network error: {type(request_error).__name__}: {request_error}"
+    except (ValueError, KeyError, IndexError, TypeError) as parse_error:
+        diagnostic = f"Could not parse OpenRouter response: {type(parse_error).__name__}: {parse_error}"
+    except Exception as unexpected_error:
+        diagnostic = f"Unexpected OpenRouter error: {type(unexpected_error).__name__}: {unexpected_error}"
 
-    if not errors:
-        errors.append("No model returned a usable text response.")
-
-    # Keep a diagnostic for the current session and print it to Streamlit
-    # Cloud logs. Do not display raw provider errors to every public user.
-    diagnostic = "\n".join(errors)
     st.session_state["character_ai_error"] = diagnostic
-
-    print("[Goggy & Titli] All Gemini models failed:")
-    for error in errors:
-        print(f"  - {error}")
-
+    print("[Goggy & Titli] " + diagnostic)
     return None
+
         
 
      
@@ -2586,9 +2588,7 @@ def show_search():
 
                 st.warning(
                     "No matching organism was found."
-                )
-
-    # =====================================================
+)# =====================================================
     # SHOW SPECIES
     # =====================================================
 
@@ -3006,4 +3006,3 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 
 # Render the selected page.
 page_function()
-    
