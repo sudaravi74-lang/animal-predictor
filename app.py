@@ -8,6 +8,7 @@ import uuid
 from io import BytesIO
 from PIL import Image
 from google import genai
+from google.genai import types
 # SUPABASE DATABASE DRIVER
 import psycopg2
 
@@ -1820,11 +1821,19 @@ Now reply naturally as {character.capitalize()}.
             response = (
                 gemini_client
                 .models
+                
                 .generate_content(
                     model=model_name,
-                    contents=prompt
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        tools=[
+                            types.Tool(
+                                google_search=types.GoogleSearch()
+                            )
+                        ]
+                    )
                 )
-            )
+                
 
             answer = (
                 response.text
