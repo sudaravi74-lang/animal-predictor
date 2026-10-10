@@ -181,15 +181,24 @@ def ensure_chat_table():
 
 
 def save_chat_to_supabase(character, messages, chat_id=None, custom_title=None):
-    """Insert/update one chat. Returns (success, chat_id, error_message)."""
+    """Safely insert/update one chat without reusing a conflicting primary key.
+
+    Returns (success, saved_chat_id, error_message). If the supplied ID is stale
+    or belongs to a different browser session, create a fresh UUID rather than
+    attempting to insert the conflicting ID again.
+    """
     if not messages:
         return False, chat_id, "There are no messages to save yet."
+
     connection = None
     try:
         if not ensure_chat_table():
             return False, chat_id, "SUPABASE_DB_URL is missing from Streamlit Secrets."
+
         connection = get_chat_db_connection()
+        session_id = str(st.session_state.chat_session_id)
         new_chat_id = str(chat_id or uuid.uuid4())
+
         first_user_message = next(
             (str(item.get("content", "")).strip() for item in messages
              if item.get("role") == "user" and str(item.get("content", "")).strip()),
@@ -198,33 +207,67 @@ def save_chat_to_supabase(character, messages, chat_id=None, custom_title=None):
         title = (str(custom_title).strip() if custom_title else first_user_message)[:120]
         if not title:
             title = first_user_message[:120]
+        messages_json = json.dumps(messages, ensure_ascii=False)
+
         with connection:
             with connection.cursor() as cursor:
+                # First, update only a row owned by this browser session and character.
                 if chat_id:
                     cursor.execute("""
                         UPDATE nature_ai_chats
                         SET title = %s, messages = %s::jsonb, updated_at = NOW()
                         WHERE chat_id = %s AND session_id = %s AND character = %s
-                    """, (title, json.dumps(messages), new_chat_id,
-                          st.session_state.chat_session_id, character))
-                    if cursor.rowcount == 0:
-                        # Never update a chat belonging to a different session.
-                        cursor.execute("""
-                            INSERT INTO nature_ai_chats
-                                (chat_id, session_id, character, title, messages)
-                            VALUES (%s, %s, %s, %s, %s::jsonb)
-                        """, (new_chat_id, st.session_state.chat_session_id,
-                              character, title, json.dumps(messages)))
-                else:
+                    """, (title, messages_json, new_chat_id, session_id, character))
+                    if cursor.rowcount > 0:
+                        return True, new_chat_id, None
+
+                    # If update missed, check whether the ID exists but is stale or
+                    # belongs to another session/character. Never overwrite that row.
+                    cursor.execute("""
+                        SELECT session_id, character
+                        FROM nature_ai_chats
+                        WHERE chat_id = %s
+                    """, (new_chat_id,))
+                    existing = cursor.fetchone()
+                    if existing:
+                        # A matching owner may have changed concurrently; retry a
+                        # constrained update before deciding to create a fresh ID.
+                        if str(existing[0]) == session_id and existing[1] == character:
+                            cursor.execute("""
+                                UPDATE nature_ai_chats
+                                SET title = %s, messages = %s::jsonb, updated_at = NOW()
+                                WHERE chat_id = %s AND session_id = %s AND character = %s
+                            """, (title, messages_json, new_chat_id, session_id, character))
+                            if cursor.rowcount > 0:
+                                return True, new_chat_id, None
+                        # Existing ID cannot safely be reused. Use a new UUID.
+                        new_chat_id = str(uuid.uuid4())
+
+                # Insert with a fresh ID. ON CONFLICT is a final race-condition
+                # guard; it updates only when the row belongs to this same session
+                # and character. If it cannot safely update, retry with a fresh ID.
+                for attempt in range(3):
                     cursor.execute("""
                         INSERT INTO nature_ai_chats
                             (chat_id, session_id, character, title, messages)
                         VALUES (%s, %s, %s, %s, %s::jsonb)
-                    """, (new_chat_id, st.session_state.chat_session_id,
-                          character, title, json.dumps(messages)))
-        return True, new_chat_id, None
+                        ON CONFLICT (chat_id) DO UPDATE
+                        SET title = EXCLUDED.title,
+                            messages = EXCLUDED.messages,
+                            updated_at = NOW()
+                        WHERE nature_ai_chats.session_id = EXCLUDED.session_id
+                          AND nature_ai_chats.character = EXCLUDED.character
+                        RETURNING chat_id
+                    """, (new_chat_id, session_id, character, title, messages_json))
+                    saved_row = cursor.fetchone()
+                    if saved_row:
+                        return True, str(saved_row[0]), None
+                    new_chat_id = str(uuid.uuid4())
+
+        return False, None, "Could not create a unique saved-chat ID after several attempts. Please retry."
+
     except Exception as exc:
-        return False, chat_id, str(exc)
+        return False, chat_id, f"{type(exc).__name__}: {exc}"
     finally:
         if connection is not None:
             connection.close()
@@ -416,9 +459,7 @@ def search_taxon_cached(search_name):
     except Exception as e:
         return {
             "error": str(e)
-        }
-
-# =========================================================
+}# =========================================================
 # iNATURALIST OBSERVATIONS
 # =========================================================
 
@@ -609,7 +650,9 @@ Rules:
         if start != -1 and end != -1:
             text = text[start:end + 1]
 
-    return json.loads(text)# =========================================================
+    return json.loads(text)
+
+# =========================================================
 # GEMINI IDENTIFICATION
 # =========================================================
 
@@ -668,7 +711,7 @@ def identify_organism_cached(
         "success": False,
         "error": "\n\n".join(errors),
         "model": None
-}# =========================================================
+    }# =========================================================
 # ORGANISM TYPE
 # =========================================================
 
@@ -2279,11 +2322,14 @@ def show_conversation():
                     # so the entire new exchange persists without creating a one-message file.
                     active_saved_id = st.session_state.current_chat_ids.get(character)
                     if active_saved_id:
-                        auto_ok, _, auto_error = save_chat_to_supabase(
+                        auto_ok, auto_saved_id, auto_error = save_chat_to_supabase(
                             character, conversation_history, active_saved_id,
                             st.session_state.get(f"chat_title_{character}", "").strip() or None
                         )
-                        if not auto_ok:
+                        if auto_ok:
+                            # Keep the latest ID if the saver had to replace a stale/conflicting ID.
+                            st.session_state.current_chat_ids[character] = auto_saved_id
+                        else:
                             st.warning("Reply received, but updating the saved session failed: " + str(auto_error))
 
                     # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
@@ -2467,11 +2513,13 @@ def show_voice_space():
             speak_character_text(character, answer)
             active_id = st.session_state.current_chat_ids.get(character)
             if active_id:
-                ok, _, err = save_chat_to_supabase(
+                ok, voice_saved_id, err = save_chat_to_supabase(
                     character, history, active_id,
                     st.session_state.get(f"chat_title_{character}", "").strip() or None
                 )
-                if not ok:
+                if ok:
+                    st.session_state.current_chat_ids[character] = voice_saved_id
+                else:
                     st.warning("Voice reply was not saved to Supabase: " + str(err))
         else:
             st.warning(f"{character_name} couldn't answer right now. Please try again.")
