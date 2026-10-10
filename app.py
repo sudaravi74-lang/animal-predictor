@@ -460,7 +460,12 @@ except Exception:
 GEMINI_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-3.6-flash"
+    "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    
+    
 ]
 
 
@@ -1838,15 +1843,22 @@ Now reply naturally as {character.capitalize()}.
                 + ": "
                 + str(e)
             )
+    # =====================================================
+    # ALL MODELS FAILED — LOG DIAGNOSTIC DETAILS
+    # =====================================================
 
-    # =====================================================
-    # ALL MODELS FAILED
-    # =====================================================
+    if not errors:
+        errors.append("No model returned a usable text response.")
+
+    print("[Goggy & Titli] All Gemini models failed:")
+
+    for error in errors:
+        print(f"  - {error}")
 
     return None
+        
 
-
-
+     
 # =========================================================
 # CONVERSATION PAGE — MODULAR, RETRY-SAFE VERSION
 # =========================================================
