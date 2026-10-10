@@ -208,7 +208,16 @@ def save_chat_to_supabase(character, messages, chat_id=None, custom_title=None):
                     """, (title, json.dumps(messages), new_chat_id,
                           st.session_state.chat_session_id, character))
                     if cursor.rowcount == 0:
-                        # Never update a chat belonging to a different session.
+                        # The ID may already exist under an older browser/session owner.
+                        # Never overwrite another owner's chat: check first, then assign
+                        # a fresh UUID if the requested ID is already taken.
+                        cursor.execute(
+                            "SELECT session_id, character FROM nature_ai_chats WHERE chat_id = %s",
+                            (new_chat_id,)
+                        )
+                        existing_owner = cursor.fetchone()
+                        if existing_owner:
+                            new_chat_id = str(uuid.uuid4())
                         cursor.execute("""
                             INSERT INTO nature_ai_chats
                                 (chat_id, session_id, character, title, messages)
@@ -278,10 +287,7 @@ def delete_chat_from_supabase(chat_id):
         return False, str(exc)
     finally:
         if connection is not None:
-            connection.close()
-
-
-# =========================================================
+            connection.close()# =========================================================
 # iNATURALIST API
 # =========================================================
 
@@ -519,8 +525,9 @@ GEMINI_MODELS = [
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
-    
-    
+    # Extra compatibility fallback; availability depends on the API key/project.
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
 ]
 
 
@@ -608,9 +615,7 @@ Rules:
         if start != -1 and end != -1:
             text = text[start:end + 1]
 
-    return json.loads(text)
-
-# =========================================================
+    return json.loads(text)# =========================================================
 # GEMINI IDENTIFICATION
 # =========================================================
 
@@ -787,9 +792,7 @@ def show_species_page(
 
     st.markdown(
         "### *" + scientific_name + "*"
-    )
-
-    # =====================================================
+)# =====================================================
     # BASIC INFORMATION
     # =====================================================
 
@@ -890,7 +893,9 @@ def show_species_page(
             st.write(
                 "**Identification reason:** "
                 + str(reason)
-    )# =====================================================
+            )
+
+    # =====================================================
     # MORE INFORMATION
     # =====================================================
 
@@ -1291,8 +1296,7 @@ def speak_character_text(character, text):
     }})();
     </script></body></html>
     """
-    st.components.v1.html(html, height=28, scrolling=False)
-    # =========================================================
+    st.components.v1.html(html, height=28, scrolling=False)# =========================================================
 # 🎙️ REAL VOICE INPUT — SPEECH RECOGNITION
 # =========================================================
 #
@@ -1629,7 +1633,8 @@ def voice_input_test():
         None
     )
 
-    return voice_text# =========================================================
+    return voice_text
+                # =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
@@ -1640,8 +1645,11 @@ def ask_character_ai(
     image_bytes=None
 ):
 
+    st.session_state["character_ai_error_detail"] = ""
     if gemini_client is None:
-
+        st.session_state["character_ai_error_detail"] = (
+            "GEMINI_API_KEY is missing, unreadable, or the Gemini client could not initialize."
+        )
         return None
 
     # =====================================================
@@ -1850,10 +1858,7 @@ Current user message:
 User: {user_message}
 
 Now reply naturally as {character.capitalize()}.
-"""
-
-    
-    # =====================================================
+"""# =====================================================
     # GEMINI MODEL FALLBACK + GOOGLE SEARCH + ERROR LOGGING
     # =====================================================
 
@@ -1872,40 +1877,37 @@ Now reply naturally as {character.capitalize()}.
             return "I couldn't read that image file. Please upload a clear JPG or PNG photo."
 
     for model_name in GEMINI_MODELS:
-        try:
-            response = (
-                gemini_client
-                .models
-                .generate_content(
-                    model=model_name,
-                    contents=request_contents,
-                    config=types.GenerateContentConfig(
-                        tools=[
-                            types.Tool(
-                                google_search=types.GoogleSearch()
-                            )
-                        ]
-                    )
+        # First try grounded search for questions that benefit from current sources.
+        # If search grounding is unavailable for this key/model, retry the SAME model
+        # without the search tool instead of making the character completely fail.
+        attempts = [
+            ("Google Search enabled", types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())]
+            )),
+            ("without Google Search", None),
+        ]
+        for attempt_label, config in attempts:
+            try:
+                request_kwargs = {
+                    "model": model_name,
+                    "contents": request_contents,
+                }
+                if config is not None:
+                    request_kwargs["config"] = config
+                response = gemini_client.models.generate_content(**request_kwargs)
+
+                answer = response.text.strip() if response and response.text else ""
+                if answer:
+                    st.session_state["character_ai_error_detail"] = ""
+                    return answer.strip()
+
+                errors.append(f"{model_name} ({attempt_label}): Empty response text")
+            except Exception as e:
+                errors.append(
+                    f"{model_name} ({attempt_label}): {type(e).__name__}: {e}"
                 )
-            )
 
-            answer = (
-                response.text.strip()
-                if response and response.text
-                else ""
-            )
-
-            if answer:
-                return answer.strip()
-
-            errors.append(
-                f"{model_name}: Empty response text"
-            )
-
-        except Exception as e:
-            errors.append(
-                f"{model_name}: {type(e).__name__}: {e}"
-)# =====================================================
+    # =====================================================
     # ALL MODELS FAILED — LOG DIAGNOSTIC DETAILS
     # =====================================================
 
@@ -1917,6 +1919,7 @@ Now reply naturally as {character.capitalize()}.
     for error in errors:
         print(f"  - {error}")
 
+    st.session_state["character_ai_error_detail"] = "\n".join(errors[-12:])
     return None
         
 
@@ -2125,6 +2128,10 @@ def show_conversation():
             role = "assistant"
         with st.chat_message(role):
             st.write(content)
+            if role == "assistant" and str(content).strip():
+                with st.expander("📋 Copy this answer"):
+                    st.caption("Use the copy icon on the text box below.")
+                    st.code(str(content), language=None)
             saved_image = decode_chat_image(message.get("image_base64"))
             if saved_image:
                 st.image(saved_image, caption="Photo attached to this message", use_container_width=True)
@@ -2205,9 +2212,16 @@ def show_conversation():
                         f"I couldn't connect to {character_name} right now. "
                         "Your message is saved; use the Retry button below."
                     )
+                    diagnostic = st.session_state.get("character_ai_error_detail", "")
+                    if diagnostic:
+                        with st.expander("🔧 Technical details (for troubleshooting)"):
+                            st.code(diagnostic, language=None)
                 else:
                     answer = str(answer).strip()
                     st.write(answer)
+                    with st.expander("📋 Copy this answer"):
+                        st.caption("Use the copy icon on the text box below.")
+                        st.code(str(answer), language=None)
                     conversation_history.append({
                         "role": "assistant",
                         "content": answer
@@ -2297,9 +2311,16 @@ def show_conversation():
                         f"{character_name} still couldn't answer. "
                         "Your message is still saved. Please retry again."
                     )
+                    diagnostic = st.session_state.get("character_ai_error_detail", "")
+                    if diagnostic:
+                        with st.expander("🔧 Technical details (for troubleshooting)"):
+                            st.code(diagnostic, language=None)
                 else:
                     retry_answer = str(retry_answer).strip()
                     st.write(retry_answer)
+                    with st.expander("📋 Copy this answer"):
+                        st.caption("Use the copy icon on the text box below.")
+                        st.code(str(retry_answer), language=None)
                     conversation_history.append({
                         "role": "assistant",
                         "content": retry_answer
@@ -2416,7 +2437,10 @@ def show_voice_space():
     st.caption("Tip: tap the microphone, allow browser microphone access, and speak clearly.")
     if st.button("💬 Return to text chat", key="return_to_text_chat", use_container_width=True):
         st.session_state.page = "conversation"
-        st.rerun()# SEARCH PAGE
+        st.rerun()
+
+
+# SEARCH PAGE
 # =========================================================
 
 def show_search():
@@ -2456,9 +2480,7 @@ def show_search():
         submitted = st.form_submit_button(
             "🔎 Search",
             use_container_width=True
-        )
-
-    # =====================================================
+    )# =====================================================
     # SEARCH
     # =====================================================
 
