@@ -609,7 +609,10 @@ def identify_organism_cached(
         "success": False,
         "error": "\n\n".join(errors),
         "model": None
-        }# =========================================================
+    }
+
+
+# =========================================================
 # ORGANISM TYPE
 # =========================================================
 
@@ -726,9 +729,7 @@ def show_species_page(
 
     st.markdown(
         "### *" + scientific_name + "*"
-    )
-
-    # =====================================================
+)# =====================================================
     # BASIC INFORMATION
     # =====================================================
 
@@ -1198,21 +1199,36 @@ def speak_character_text(character, text):
         }}
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        // Hindi text uses a Hindi voice when installed; otherwise use English.
+        // Detect Devanagari text and explicitly request the correct language.
         const hasHindi = /[\\u0900-\\u097F]/.test(text);
         utterance.lang = hasHindi ? 'hi-IN' : 'en-US';
-        // Give Goggy and Titli slightly different delivery where supported.
-        utterance.rate = character === 'titli' ? 1.02 : 0.96;
-        utterance.pitch = character === 'titli' ? 1.22 : 0.92;
+        // Keep the characters distinct, while slowing Hindi slightly for clarity.
+        utterance.rate = hasHindi
+          ? (character === 'titli' ? 0.90 : 0.88)
+          : (character === 'titli' ? 1.02 : 0.96);
+        utterance.pitch = character === 'titli' ? 1.18 : 0.96;
         let started = false;
         const chooseVoice = () => {{
           if (started) return;
           const voices = window.speechSynthesis.getVoices() || [];
+          // Prefer an exact Hindi (India) voice; otherwise use another Hindi voice.
+          // Never deliberately select an English voice for Hindi text.
+          const langPrefix = hasHindi ? 'hi' : 'en';
+          const candidates = voices.filter(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
+          const matching = hasHindi
+            ? (candidates.find(v => (v.lang || '').toLowerCase() === 'hi-in') || candidates[0])
+            : (candidates.find(v => (v.lang || '').toLowerCase() === 'en-in') || candidates[0]);
+          // Wait for the browser's voice list when it is not ready yet.
+          if (!matching && voices.length === 0 && !chooseVoice.waited) {{
+            chooseVoice.waited = true;
+            setTimeout(chooseVoice, 700);
+            return;
+          }}
           started = true;
-          const prefix = hasHindi ? 'hi' : 'en';
-          const matching = voices.find(v => (v.lang || '').toLowerCase().startsWith(prefix));
           if (matching) utterance.voice = matching;
-          status.textContent = '🔊 ' + (character === 'titli' ? 'Titli' : 'Goggy') + ' speaking';
+          status.textContent = matching
+            ? ('🔊 ' + (character === 'titli' ? 'Titli' : 'Goggy') + ' speaking (' + matching.lang + ')')
+            : (hasHindi ? 'Hindi voice not found in this browser; check Google TTS Hindi voice installation.' : 'Using the browser default English voice');
           window.speechSynthesis.speak(utterance);
         }};
         const voices = window.speechSynthesis.getVoices();
@@ -2101,9 +2117,7 @@ def show_conversation():
                 if saved_ok:
                     st.session_state.current_chat_ids[character] = saved_id
                 else:
-                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
-
-    # -----------------------------------------------------
+                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))# -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -2307,7 +2321,9 @@ def show_search():
         submitted = st.form_submit_button(
             "🔎 Search",
             use_container_width=True
-        )# =====================================================
+        )
+
+    # =====================================================
     # SEARCH
     # =====================================================
 
@@ -2624,10 +2640,7 @@ def show_identify():
 
                 st.caption(
                     "AI model: "
-                    + st.session_state.ai_model_used
-                )
-
-            # =============================================
+                    + st.session_state.ai_model_used# =============================================
             # FIND iNATURALIST SPECIES
             # =============================================
 
@@ -2796,3 +2809,7 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 page_function()
 
     
+        )
+            
+                
+                               
