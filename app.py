@@ -1315,7 +1315,11 @@ def speak_character_text(character, text):
         const utterance = new SpeechSynthesisUtterance(text);
         // Detect Devanagari text and explicitly request the correct language.
         const hasHindi = /[\\u0900-\\u097F]/.test(text);
-        utterance.lang = hasHindi ? 'hi-IN' : 'en-IN';
+        // CHANGE 2: Select Hindi for Hindi text and US English for English text.
+        // The device/browser must have the requested voice installed.
+        utterance.lang = hasHindi ? 'hi-IN' : 'en-US';
+        
+         
         // Keep the characters distinct, while slowing Hindi slightly for clarity.
         utterance.rate = hasHindi
           ? (character === 'titli' ? 0.90 : 0.88)
@@ -1327,11 +1331,19 @@ def speak_character_text(character, text):
           const voices = window.speechSynthesis.getVoices() || [];
           // Prefer an exact Hindi (India) voice; otherwise use another Hindi voice.
           // Never deliberately select an English voice for Hindi text.
-          const langPrefix = hasHindi ? 'hi' : 'en';
-          const candidates = voices.filter(v => (v.lang || '').toLowerCase().startsWith(langPrefix));
-          const matching = hasHindi
-            ? (candidates.find(v => (v.lang || '').toLowerCase() === 'hi-in') || candidates[0])
-            : (candidates.find(v => (v.lang || '').toLowerCase() === 'en-in') || candidates[0]);
+            // CHANGE 2: Select a voice matching the reply language.
+            // Hindi replies prefer Hindi (India); English replies prefer US English.
+            const langPrefix = hasHindi ? 'hi' : 'en';
+            const candidates = voices.filter(v =>
+                (v.lang || '').toLowerCase().startsWith(langPrefix)
+            );
+            const matching = hasHindi
+                ? (candidates.find(v => (v.lang || '').toLowerCase() === 'hi-in') || candidates[0])
+                : (candidates.find(v => (v.lang || '').toLowerCase() === 'en-us') ||
+                   candidates.find(v => (v.lang || '').toLowerCase() === 'en-gb') ||
+                   candidates[0]);
+                   
+          
           // Wait for the browser's voice list when it is not ready yet.
           if (!matching && voices.length === 0 && !chooseVoice.waited) {{
             chooseVoice.waited = true;
@@ -1507,8 +1519,12 @@ VOICE_INPUT_COMPONENT = st.components.v2.component(
         // ---------------------------------------------
 
         recognition = new SpeechRecognition();
+        // CHANGE 1: Set the browser's preferred language for speech recognition.
+        // NOTE: This does not reliably auto-detect the language being spoken.
+        recognition.lang = navigator.language || "en-IN";
+        
 
-        recognition.lang = "hi-IN";
+        
 
         recognition.continuous = false;
 
@@ -1759,20 +1775,18 @@ For an uploaded photo, inspect what is actually visible.
 Do not invent details that cannot be seen.
 # LANGUAGE RULES — HINDI AND INDIAN ENGLISH
 # Detect the language of the user's latest message.
-# Hindi written in Devanagari or Roman Hindi should receive a
-# natural Hindi reply. Prefer Devanagari Hindi unless requested otherwise.
-# English questions should receive natural English replies.
-# Do not unnecessarily mix Hindi and English.
-# Keep these language rules for BOTH Goggy and Titli.
-# The reply language also determines the spoken language.
-LANGUAGE RULES:
-- If the user writes in Hindi, reply in natural Hindi.
-- If the user writes Hindi using English letters
-  (Roman Hindi/Hinglish), understand it as Hindi and reply in Hindi.
-- If the user writes in English, reply in English.
-- Follow an explicit request to use a different language.
-- For Hindi answers, use Devanagari script by default.
-- Keep the language consistent throughout the answer.
+        # CHANGE 3: Match Goggy and Titli's reply language to the latest user message.
+        # Voice Space should pass the recognised speech as user_message.
+        LANGUAGE RULES:
+        - Detect the language of the CURRENT USER MESSAGE.
+        - If the user speaks English, reply in English.
+        - If the user speaks Hindi, reply in natural Hindi using Devanagari script.
+        - If the user speaks another language, reply in that language when supported.
+        - Do not use the previous conversation's language to decide the current reply.
+        - Follow an explicit request to change languages.
+        - Keep the spoken reply in the same language as the written reply.
+        
+ 
 
 
 Do not mention APIs, models, or technical errors.
