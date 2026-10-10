@@ -2291,9 +2291,7 @@ def show_conversation():
                                     "No detailed error was recorded."
                                 )
                             )
-                        )
-
-                # Keep the existing successful-answer code unchanged.
+                        )# Keep the existing successful-answer code unchanged.
                 else:
                     retry_answer = str(retry_answer).strip()
                     st.write(retry_answer)
@@ -2309,6 +2307,8 @@ def show_conversation():
                     })
                     st.session_state[pending_key] = None
                     st.session_state[keep_blank_key] = False
+
+                
 
                     # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
                     if st.session_state.get("audio_enabled", True):
