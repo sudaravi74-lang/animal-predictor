@@ -490,19 +490,21 @@ def get_large_photo_url(photo):
 # GEMINI SETUP
 # =========================================================
 
+# Keep the setup failure so a missing/invalid secret does not silently
+# look like a temporary network problem in the chat UI.
+GEMINI_SETUP_ERROR = None
+
 try:
+    GEMINI_API_KEY = str(st.secrets["GEMINI_API_KEY"]).strip()
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY is empty.")
 
-    GEMINI_API_KEY = st.secrets[
-        "GEMINI_API_KEY"
-    ]
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
-    gemini_client = genai.Client(
-        api_key=GEMINI_API_KEY
-    )
-
-except Exception:
-
+except Exception as setup_exc:
+    GEMINI_SETUP_ERROR = f"{type(setup_exc).__name__}: {setup_exc}"
     gemini_client = None
+    print("[Goggy & Titli] Gemini client setup failed: " + GEMINI_SETUP_ERROR)
 
 
 # =========================================================
@@ -759,7 +761,7 @@ def show_species_page(
     organism_type = determine_organism_type(
         taxon,
         ai_result
-)# =====================================================
+        )# =====================================================
     # HEADER
     # =====================================================
 
@@ -1104,9 +1106,7 @@ def show_home():
                         "I couldn't find that organism."
                     )
 
-    st.divider()
-
-    # =====================================================
+    st.divider()# =====================================================
     # OTHER OPTIONS
     # =====================================================
 
@@ -1665,7 +1665,9 @@ def ask_character_ai(
 ):
 
     if gemini_client is None:
-
+        reason = GEMINI_SETUP_ERROR or "Gemini client is not configured."
+        print("[Goggy & Titli] Cannot send request: " + reason)
+        st.session_state["character_ai_error"] = reason
         return None
 
     # =====================================================
@@ -1895,39 +1897,68 @@ Now reply naturally as {character.capitalize()}.
 
     for model_name in GEMINI_MODELS:
         try:
-            response = (
-                gemini_client
-                .models
-                .generate_content(
-                    model=model_name,
-                    contents=request_contents,
-                    config=types.GenerateContentConfig(
-                        tools=[
-                            types.Tool(
-                                google_search=types.GoogleSearch()
-                            )
-                        ]
-                    )
+            # First try with Google Search enabled for questions that benefit
+            # from fresh information.
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=request_contents,
+                config=types.GenerateContentConfig(
+                    tools=[
+                        types.Tool(
+                            google_search=types.GoogleSearch()
+                        )
+                    ]
                 )
             )
 
-            answer = (
-                response.text.strip()
-                if response and response.text
-                else ""
+        except Exception as search_exc:
+            search_error = f"{type(search_exc).__name__}: {search_exc}"
+            errors.append(f"{model_name} (Google Search enabled): {search_error}")
+
+            # Some model/API-key combinations may reject the Search tool.
+            # In that case, retry this same model once without the tool
+            # before moving to the next fallback model.
+            search_error_lower = search_error.lower()
+            search_tool_problem = any(
+                marker in search_error_lower
+                for marker in (
+                    "google_search",
+                    "google search",
+                    "grounding",
+                    "unsupported tool",
+                    "tool is not supported",
+                    "tools are not supported",
+                    "tool use is not supported",
+                    "not supported for this model",
+                )
             )
 
-            if answer:
-                return answer.strip()
+            if not search_tool_problem:
+                continue
 
-            errors.append(
-                f"{model_name}: Empty response text"
-            )
+            try:
+                response = gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=request_contents
+                )
+            except Exception as plain_exc:
+                errors.append(
+                    f"{model_name} (without Search): "
+                    f"{type(plain_exc).__name__}: {plain_exc}"
+                )
+                continue
 
-        except Exception as e:
-            errors.append(
-                f"{model_name}: {type(e).__name__}: {e}"
-            )
+        answer = (
+            response.text.strip()
+            if response and response.text
+            else ""
+        )
+
+        if answer:
+            st.session_state["character_ai_error"] = None
+            return answer
+
+        errors.append(f"{model_name}: Empty response text")
 
     
     
@@ -1938,8 +1969,12 @@ Now reply naturally as {character.capitalize()}.
     if not errors:
         errors.append("No model returned a usable text response.")
 
-    print("[Goggy & Titli] All Gemini models failed:")
+    # Keep a diagnostic for the current session and print it to Streamlit
+    # Cloud logs. Do not display raw provider errors to every public user.
+    diagnostic = "\n".join(errors)
+    st.session_state["character_ai_error"] = diagnostic
 
+    print("[Goggy & Titli] All Gemini models failed:")
     for error in errors:
         print(f"  - {error}")
 
@@ -2971,4 +3006,4 @@ page_function = PAGE_ROUTES.get(current_page, show_home)
 
 # Render the selected page.
 page_function()
-                 
+    
