@@ -2274,15 +2274,30 @@ def show_conversation():
                     except Exception as exc:
                         st.session_state["character_ai_error"] = str(exc)
                         retry_answer = None
-                # CHANGE 3: Show the error if Goggy or Titli cannot reply.
+            # CHANGE 3: Retry the last message and show useful errors.
+            with st.chat_message("assistant"):
+                with st.spinner(f"{character_name} is trying again..."):
+                    try:
+                        retry_answer = ask_character_ai(
+                            character,
+                            pending_message,
+                            history_for_prompt,
+                            image_bytes=pending_image_bytes
+                        )
+                    except Exception as exc:
+                        # Save the real error so we can troubleshoot it.
+                        st.session_state["character_ai_error"] = (
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        retry_answer = None
+
+                # CHANGE 3A: If retry fails, show the technical error.
                 if not retry_answer:
                     st.warning(
                         f"{character_name} still couldn't answer. "
                         "Your message is still saved. Please retry again."
                     )
 
-                    # CHANGE 3A: Open this panel to see the real Gemini error.
-                    # This helps us identify API key, quota, model, or connection issues.
                     with st.expander("🔧 Technical error — troubleshooting"):
                         st.code(
                             str(
@@ -2291,41 +2306,44 @@ def show_conversation():
                                     "No detailed error was recorded."
                                 )
                             )
-                        )# Keep the existing successful-answer code unchanged.
-                else:
-                    retry_answer = str(retry_answer).strip()
-                    st.write(retry_answer)
-                    
+                        )
 
-                 
+                # CHANGE 3B: If retry succeeds, display and save the reply.
                 else:
                     retry_answer = str(retry_answer).strip()
                     st.write(retry_answer)
+
                     conversation_history.append({
                         "role": "assistant",
                         "content": retry_answer
                     })
+
                     st.session_state[pending_key] = None
                     st.session_state[keep_blank_key] = False
 
-                
-
-                    # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
+                    # Use the free built-in browser voice.
                     if st.session_state.get("audio_enabled", True):
                         speak_character_text(character, retry_answer)
 
-                    # Persist the retry answer to Supabase before refreshing.
+                    # Save the completed conversation to Supabase.
                     saved_ok, saved_id, saved_error = save_chat_to_supabase(
-                        character, conversation_history,
+                        character,
+                        conversation_history,
                         st.session_state.current_chat_ids.get(character)
                     )
+
                     if saved_ok:
                         st.session_state.current_chat_ids[character] = saved_id
                     else:
-                        st.warning("Retry worked, but Supabase save failed: " + str(saved_error))
+                        st.warning(
+                            "Retry worked, but Supabase save failed: "
+                            + str(saved_error)
+                        )
 
-                    # Refresh to render the saved answer in chat history.
-                    st.rerun()# -----------------------------------------------------
+                    # Refresh the page to display the saved reply.
+                    st.rerun()
+                    
+                # -----------------------------------------------------
     # 8. Voice settings
     # -----------------------------------------------------
     st.divider()
