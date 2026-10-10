@@ -1808,20 +1808,18 @@ User: {user_message}
 Now reply naturally as {character.capitalize()}.
 """
 
+    
     # =====================================================
-    # GEMINI MODEL FALLBACK
+    # GEMINI MODEL FALLBACK + GOOGLE SEARCH + ERROR LOGGING
     # =====================================================
 
     errors = []
 
     for model_name in GEMINI_MODELS:
-
         try:
-
             response = (
                 gemini_client
                 .models
-                
                 .generate_content(
                     model=model_name,
                     contents=prompt,
@@ -1833,25 +1831,28 @@ Now reply naturally as {character.capitalize()}.
                         ]
                     )
                 )
-                
+            )
 
             answer = (
-                response.text
-                if response
+                response.text.strip()
+                if response and response.text
                 else ""
             )
 
             if answer:
-
                 return answer.strip()
 
-        except Exception as e:
-
             errors.append(
-                model_name
-                + ": "
-                + str(e)
+                f"{model_name}: Empty response text"
             )
+
+        except Exception as e:
+            errors.append(
+                f"{model_name}: {type(e).__name__}: {e}"
+            )
+
+    
+    
     # =====================================================
     # ALL MODELS FAILED — LOG DIAGNOSTIC DETAILS
     # =====================================================
