@@ -1315,7 +1315,7 @@ def speak_character_text(character, text):
         const utterance = new SpeechSynthesisUtterance(text);
         // Detect Devanagari text and explicitly request the correct language.
         const hasHindi = /[\\u0900-\\u097F]/.test(text);
-        utterance.lang = hasHindi ? 'hi-IN' : 'en-US';
+        utterance.lang = hasHindi ? 'hi-IN' : 'en-IN';
         // Keep the characters distinct, while slowing Hindi slightly for clarity.
         utterance.rate = hasHindi
           ? (character === 'titli' ? 0.90 : 0.88)
@@ -1508,7 +1508,7 @@ VOICE_INPUT_COMPONENT = st.components.v2.component(
 
         recognition = new SpeechRecognition();
 
-        recognition.lang = "en-IN";
+        recognition.lang = "hi-IN";
 
         recognition.continuous = false;
 
@@ -1757,7 +1757,24 @@ You can discuss any subject, not just nature.
 For maths, show the working when useful.
 For an uploaded photo, inspect what is actually visible.
 Do not invent details that cannot be seen.
-Reply in the language the user uses when possible.
+# LANGUAGE RULES — HINDI AND INDIAN ENGLISH
+# Detect the language of the user's latest message.
+# Hindi written in Devanagari or Roman Hindi should receive a
+# natural Hindi reply. Prefer Devanagari Hindi unless requested otherwise.
+# English questions should receive natural English replies.
+# Do not unnecessarily mix Hindi and English.
+# Keep these language rules for BOTH Goggy and Titli.
+# The reply language also determines the spoken language.
+LANGUAGE RULES:
+- If the user writes in Hindi, reply in natural Hindi.
+- If the user writes Hindi using English letters
+  (Roman Hindi/Hinglish), understand it as Hindi and reply in Hindi.
+- If the user writes in English, reply in English.
+- Follow an explicit request to use a different language.
+- For Hindi answers, use Devanagari script by default.
+- Keep the language consistent throughout the answer.
+
+
 Do not mention APIs, models, or technical errors.
 
 Previous conversation:
