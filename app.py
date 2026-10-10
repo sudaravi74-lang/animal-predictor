@@ -68,26 +68,80 @@ for key, value in defaults.items():
 
 # =========================================================
 # SUPABASE CHAT STORAGE
-# Uses a stable browser token in the URL so saved chats survive refresh.
-# IMPORTANT: add real user authentication before publishing publicly.
+# A browser-local ID keeps saved chats available after closing/reopening
+# the app in the same browser profile. This is NOT user authentication.
+# Add proper login before making private conversations public.
 # =========================================================
 
-# Preserve the same chat owner when this browser refreshes the app.
-# The token is a locator, NOT a replacement for secure authentication.
+# Store a stable, per-browser chat ID in localStorage.
+# Streamlit components return it to Python and trigger a rerun.
+BROWSER_CHAT_ID_COMPONENT = st.components.v2.component(
+    name="nature_chat_browser_identity",
+    html="<div style='font-size:11px;color:#888'>Preparing saved chats…</div>",
+    css="",
+    js="""
+    export default function(component) {
+        const { setTriggerValue } = component;
+        let owner = "";
+        try {
+            owner = localStorage.getItem("nature_ai_chat_owner") || "";
+            if (!owner) {
+                // Reuse the old URL token once, so earlier saved chats can still be found.
+                const oldUrlOwner = new URL(window.location.href).searchParams.get("chat_owner");
+                owner = oldUrlOwner || (
+                    (window.crypto && crypto.randomUUID)
+                        ? crypto.randomUUID()
+                        : ("chat-" + Date.now().toString(36) + "-" +
+                           Math.random().toString(36).slice(2))
+                );
+                localStorage.setItem("nature_ai_chat_owner", owner);
+            }
+        } catch (e) {
+            owner = "temporary-" + Math.random().toString(36).slice(2);
+        }
+        setTriggerValue("owner", owner);
+        return () => {};
+    }
+    """
+)
+_browser_identity = BROWSER_CHAT_ID_COMPONENT(key="nature_ai_chat_browser_identity")
+_browser_owner = getattr(_browser_identity, "owner", None)
+
+# Backward-compatible fallback for older URLs/browser restrictions.
 try:
-    _chat_owner = st.query_params.get("chat_owner")
+    _query_chat_owner = st.query_params.get("chat_owner")
 except Exception:
-    _chat_owner = None
-if not _chat_owner:
-    _chat_owner = str(uuid.uuid4())
-    try:
-        st.query_params["chat_owner"] = _chat_owner
-    except Exception:
-        pass
-st.session_state.chat_session_id = str(_chat_owner)
+    _query_chat_owner = None
+
+_chat_owner = str(_browser_owner or _query_chat_owner or uuid.uuid4())
+st.session_state.chat_session_id = _chat_owner
 
 if "current_chat_ids" not in st.session_state:
     st.session_state.current_chat_ids = {"gogy": None, "titli": None}
+
+
+def encode_chat_image(image_bytes):
+    """Resize/compress an uploaded chat photo before saving it with the message."""
+    if not image_bytes:
+        return None
+    try:
+        image = Image.open(BytesIO(image_bytes)).convert("RGB")
+        image.thumbnail((1280, 1280))
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=82, optimize=True)
+        return base64.b64encode(output.getvalue()).decode("ascii")
+    except Exception:
+        return None
+
+
+def decode_chat_image(image_base64):
+    """Decode an image stored with a saved conversation message."""
+    if not image_base64:
+        return None
+    try:
+        return base64.b64decode(image_base64)
+    except Exception:
+        return None
 
 
 def get_chat_db_connection():
@@ -836,9 +890,7 @@ def show_species_page(
             st.write(
                 "**Identification reason:** "
                 + str(reason)
-            )
-
-    # =====================================================
+    )# =====================================================
     # MORE INFORMATION
     # =====================================================
 
@@ -945,11 +997,6 @@ def show_home():
         ):
 
             st.session_state.active_character = "gogy"
-
-            st.session_state.character_conversation = []
-            st.session_state.gogy_conversation = []
-            st.session_state.current_chat_ids["gogy"] = None
-
             st.session_state.page = "conversation"
 
             st.rerun()
@@ -970,11 +1017,6 @@ def show_home():
         ):
 
             st.session_state.active_character = "titli"
-
-            st.session_state.character_conversation = []
-            st.session_state.titli_conversation = []
-            st.session_state.current_chat_ids["titli"] = None
-
             st.session_state.page = "conversation"
 
             st.rerun()
@@ -1250,9 +1292,7 @@ def speak_character_text(character, text):
     </script></body></html>
     """
     st.components.v1.html(html, height=28, scrolling=False)
-
-
-# =========================================================
+    # =========================================================
 # 🎙️ REAL VOICE INPUT — SPEECH RECOGNITION
 # =========================================================
 #
@@ -1589,15 +1629,15 @@ def voice_input_test():
         None
     )
 
-    return voice_text
-                # =========================================================
+    return voice_text# =========================================================
 # GOGY & TITLI AI CONVERSATION
 # =========================================================
 
 def ask_character_ai(
     character,
     user_message,
-    conversation_history
+    conversation_history,
+    image_bytes=None
 ):
 
     if gemini_client is None:
@@ -1611,7 +1651,7 @@ def ask_character_ai(
     if character == "titli":
 
         personality = """
-You are Titli, a young female nature companion.
+You are Titli, a young female companion who can help with any subject, not only nature.
 
 Personality:
 - Sweet
@@ -1620,7 +1660,8 @@ Personality:
 - Slightly mischievous
 - Friendly
 - Playful
-- Loves butterflies, animals, plants and nature
+- Loves learning about the world
+- Can help with history, geography, maths, science, language, technology, writing, everyday questions, and nature
 - Scientifically accurate
 - Emotionally warm and natural
 
@@ -1637,7 +1678,8 @@ You can:
 - Show excitement
 - Show curiosity
 - Comfort the user when appropriate
-- Talk about nature and science
+- Explain concepts, solve problems step by step, check calculations, and help interpret an uploaded photo
+- Talk about any subject, including history, geography, maths, science, language, technology, writing, and nature
 
 You sometimes use expressions such as:
 "Ooooh!"
@@ -1665,7 +1707,7 @@ Do not blindly agree with the user.
     else:
 
         personality = """
-You are Gogy, a young male nature companion.
+You are Gogy, a young male companion who can help with any subject, not only nature.
 
 Personality:
 - Curious
@@ -1674,7 +1716,8 @@ Personality:
 - Intelligent
 - Calm
 - Slightly more mature than Titli
-- Loves animals, plants, science and nature
+- Loves learning about the world
+- Can help with history, geography, maths, science, language, technology, writing, everyday questions, and nature
 - Scientifically accurate
 - Warm and conversational
 
@@ -1691,7 +1734,8 @@ You can:
 - Show excitement
 - Show curiosity
 - Comfort the user when appropriate
-- Talk about nature and science
+- Explain concepts, solve problems step by step, check calculations, and help interpret an uploaded photo
+- Talk about any subject, including history, geography, maths, science, language, technology, writing, and nature
 
 You sometimes use expressions such as:
 "Hmm..."
@@ -1756,9 +1800,9 @@ Do not blindly agree with the user.
 {personality}
 
 You are part of an application called
-Nature Encyclopedia AI.
+Nature Encyclopedia AI, but you are a general-purpose assistant, not just a nature encyclopedia.
 
-The user is talking directly to you.
+The user may ask about current events, history, geography, maths, science, technology, language, writing, everyday life, or nature. Solve maths and reasoning problems carefully and show clear steps when useful. For questions that depend on current information, use the available Google Search tool when possible, prioritize reliable sources, distinguish verified facts from uncertainty, and never claim you searched if you did not. For uploaded images, inspect only what is actually visible; read and solve photographed questions when legible, and ask for a clearer image if needed. Do not invent text or details that cannot be seen.
 
 This is an ongoing conversation.
 
@@ -1815,6 +1859,18 @@ Now reply naturally as {character.capitalize()}.
 
     errors = []
 
+    # A photo is sent with the text prompt so the model can read worksheets,
+    # solve photographed maths problems, and describe visible objects.
+    request_contents = [prompt]
+    if image_bytes:
+        try:
+            request_contents.append(
+                Image.open(BytesIO(image_bytes)).convert("RGB")
+            )
+        except Exception as image_error:
+            print(f"[Goggy & Titli] Could not open chat image: {image_error}")
+            return "I couldn't read that image file. Please upload a clear JPG or PNG photo."
+
     for model_name in GEMINI_MODELS:
         try:
             response = (
@@ -1822,7 +1878,7 @@ Now reply naturally as {character.capitalize()}.
                 .models
                 .generate_content(
                     model=model_name,
-                    contents=prompt,
+                    contents=request_contents,
                     config=types.GenerateContentConfig(
                         tools=[
                             types.Tool(
@@ -1849,11 +1905,7 @@ Now reply naturally as {character.capitalize()}.
         except Exception as e:
             errors.append(
                 f"{model_name}: {type(e).__name__}: {e}"
-            )
-
-    
-    
-    # =====================================================
+)# =====================================================
     # ALL MODELS FAILED — LOG DIAGNOSTIC DETAILS
     # =====================================================
 
@@ -1920,6 +1972,7 @@ def show_conversation():
             st.session_state.current_chat_ids[character] = None
             st.session_state[title_key] = ""
             st.session_state[pending_key] = None
+            st.session_state[f"keep_blank_chat_{character}"] = True
         elif action_type == "rename":
             st.session_state[title_key] = pending_action.get("title", "")
         elif action_type == "deleted_current":
@@ -1927,8 +1980,25 @@ def show_conversation():
             st.session_state.current_chat_ids[character] = None
             st.session_state[title_key] = ""
             st.session_state[pending_key] = None
+            st.session_state[f"keep_blank_chat_{character}"] = True
 
     conversation_history = st.session_state[conversation_key]
+
+    # On reopening the app, restore the most recently saved conversation.
+    # The New Chat button opts out so it remains a genuinely blank chat.
+    keep_blank_key = f"keep_blank_chat_{character}"
+    if (
+        not conversation_history
+        and not st.session_state.current_chat_ids.get(character)
+        and not st.session_state.get(keep_blank_key, False)
+    ):
+        restored_chats, restore_error = get_saved_chats(character)
+        if restored_chats:
+            latest_chat = restored_chats[0]
+            st.session_state[conversation_key] = latest_chat.get("messages", [])
+            st.session_state.current_chat_ids[character] = latest_chat.get("chat_id")
+            st.session_state[f"chat_title_{character}"] = latest_chat.get("title", "")
+            conversation_history = st.session_state[conversation_key]
 
     # Character display details were assigned safely at the top of this function.
 
@@ -2055,13 +2125,33 @@ def show_conversation():
             role = "assistant"
         with st.chat_message(role):
             st.write(content)
+            saved_image = decode_chat_image(message.get("image_base64"))
+            if saved_image:
+                st.image(saved_image, caption="Photo attached to this message", use_container_width=True)
 
     # -----------------------------------------------------
     # 5. Text and microphone input
     # -----------------------------------------------------
+    # Photo upload for questions, worksheets, maps, objects, diagrams, etc.
+    uploader_version_key = f"{character}_image_uploader_version"
+    if uploader_version_key not in st.session_state:
+        st.session_state[uploader_version_key] = 0
+    attached_image_key = f"{character}_attached_image_bytes"
+    uploaded_chat_image = st.file_uploader(
+        "📷 Attach a photo (math question, worksheet, map, object, etc.)",
+        type=["jpg", "jpeg", "png", "webp"],
+        key=f"{character}_chat_image_{st.session_state[uploader_version_key]}",
+        help="Upload a clear photo, then type what you want Gogy/Titli to do with it."
+    )
+    if uploaded_chat_image is not None:
+        st.session_state[attached_image_key] = uploaded_chat_image.getvalue()
+    image_preview_bytes = st.session_state.get(attached_image_key)
+    if image_preview_bytes:
+        st.image(image_preview_bytes, caption="Photo ready to send", use_container_width=True)
+
     voice_text = voice_input_test()
     user_message = st.chat_input(
-        f"Talk to {character_name}...",
+        f"Ask {character_name} anything — or ask about your photo...",
         key=f"{character}_chat_input"
     )
 
@@ -2075,14 +2165,22 @@ def show_conversation():
     if user_message:
         user_message = user_message.strip()
         if user_message:
-            conversation_history.append({
+            image_bytes_for_message = st.session_state.get(attached_image_key)
+            image_base64_for_message = encode_chat_image(image_bytes_for_message)
+            user_message_record = {
                 "role": "user",
                 "content": user_message
-            })
+            }
+            if image_base64_for_message:
+                user_message_record["image_base64"] = image_base64_for_message
+                user_message_record["image_mime"] = "image/jpeg"
+            conversation_history.append(user_message_record)
             st.session_state[pending_key] = user_message
 
             with st.chat_message("user"):
                 st.write(user_message)
+                if image_bytes_for_message:
+                    st.image(image_bytes_for_message, caption="Attached photo", use_container_width=True)
 
             # Exclude the latest message from history because
             # ask_character_ai receives it separately.
@@ -2095,7 +2193,8 @@ def show_conversation():
                         answer = ask_character_ai(
                             character,
                             user_message,
-                            history_for_prompt
+                            history_for_prompt,
+                            image_bytes=image_bytes_for_message
                         )
                     except Exception as exc:
                         st.session_state["character_ai_error"] = str(exc)
@@ -2130,18 +2229,23 @@ def show_conversation():
                     if st.session_state.get("audio_enabled", True):
                         speak_character_text(character, answer)
 
+            # A sent message starts a real chat, so New Chat no longer blocks restore.
+            st.session_state[keep_blank_key] = False
+            # Reset the uploader widget for the next message.
+            st.session_state[attached_image_key] = None
+            st.session_state[uploader_version_key] += 1
+
             # Auto-save every new message/answer so a completed turn is persisted.
             if conversation_history:
                 saved_ok, saved_id, saved_error = save_chat_to_supabase(
                     character, conversation_history,
-                    st.session_state.current_chat_ids.get(character)
+                    st.session_state.current_chat_ids.get(character),
+                    st.session_state.get(f"chat_title_{character}", "").strip() or None
                 )
                 if saved_ok:
                     st.session_state.current_chat_ids[character] = saved_id
                 else:
-                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))
-
-    # -----------------------------------------------------
+                    st.warning("Chat is only in this session; Supabase save failed: " + str(saved_error))# -----------------------------------------------------
     # 7. Retry the last failed message for this character
     # -----------------------------------------------------
     pending_message = st.session_state.get(pending_key)
@@ -2166,13 +2270,23 @@ def show_conversation():
                 history_for_prompt = history_for_prompt[:-1]
 
             retry_answer = None
+            pending_image_bytes = None
+            for saved_message in reversed(conversation_history):
+                if (
+                    saved_message.get("role") == "user"
+                    and saved_message.get("content") == pending_message
+                ):
+                    pending_image_bytes = decode_chat_image(saved_message.get("image_base64"))
+                    break
+
             with st.chat_message("assistant"):
                 with st.spinner(f"{character_name} is trying again..."):
                     try:
                         retry_answer = ask_character_ai(
                             character,
                             pending_message,
-                            history_for_prompt
+                            history_for_prompt,
+                            image_bytes=pending_image_bytes
                         )
                     except Exception as exc:
                         st.session_state["character_ai_error"] = str(exc)
@@ -2191,6 +2305,7 @@ def show_conversation():
                         "content": retry_answer
                     })
                     st.session_state[pending_key] = None
+                    st.session_state[keep_blank_key] = False
 
                     # FREE BUILT-IN SPEECH: no ElevenLabs credits or API call.
                     if st.session_state.get("audio_enabled", True):
@@ -2301,10 +2416,7 @@ def show_voice_space():
     st.caption("Tip: tap the microphone, allow browser microphone access, and speak clearly.")
     if st.button("💬 Return to text chat", key="return_to_text_chat", use_container_width=True):
         st.session_state.page = "conversation"
-        st.rerun()
-
-
-# SEARCH PAGE
+        st.rerun()# SEARCH PAGE
 # =========================================================
 
 def show_search():
