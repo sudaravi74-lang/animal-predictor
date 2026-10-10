@@ -11,6 +11,8 @@ from google import genai
 from google.genai import types
 # SUPABASE DATABASE DRIVER
 import psycopg2
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 # =========================================================
@@ -1755,7 +1757,11 @@ def voice_input_test():
 # =========================================================
 # GOGGY & TITLI AI — DIRECT GEMINI CONNECTION
 # Replaces only ask_character_ai(); keeps the rest of app.py
-# =========================================================
+# =========================================================    # CHANGE 2: Always provide Goggy and Titli with today's real date.
+    # Use Indian Standard Time so the date is correct for users in India.
+    current_india_datetime = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    ).strftime("%A, %d %B %Y, %I:%M %p IST")
 
 def ask_character_ai(
     character,
@@ -1806,7 +1812,13 @@ Explain difficult topics clearly and correct mistakes gently.
 
     prompt = f"""
 {personality}
+CURRENT DATE AND TIME:
+{current_india_datetime}
 
+DATE RULE:
+- Use the current date above whenever the user asks today's date.
+- Never guess the date from memory or previous conversation.
+- Answer in the user's language.
 You are part of Nature Encyclopedia AI.
 Answer the user's actual question accurately and naturally.
 You can discuss any subject, not just nature.
