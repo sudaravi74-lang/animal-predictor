@@ -65,59 +65,78 @@ defaults = {
 for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
-
 # =========================================================
-# SUPABASE CHAT STORAGE
-# A browser-local ID keeps saved chats available after closing/reopening
-# the app in the same browser profile. This is NOT user authentication.
-# Add proper login before making private conversations public.
+# SUPABASE CHAT STORAGE — CHANGE 1
+# Stable browser identity for saved chat history
 # =========================================================
 
-# Store a stable, per-browser chat ID in localStorage.
-# Streamlit components return it to Python and trigger a rerun.
 BROWSER_CHAT_ID_COMPONENT = st.components.v2.component(
     name="nature_chat_browser_identity",
-    html="<div style='font-size:11px;color:#888'>Preparing saved chats…</div>",
+    html="<div style='font-size:11px;color:#888'>Chat history is linked to this browser profile.</div>",
     css="",
     js="""
     export default function(component) {
         const { setTriggerValue } = component;
         let owner = "";
+
         try {
             owner = localStorage.getItem("nature_ai_chat_owner") || "";
+
             if (!owner) {
-                // Reuse the old URL token once, so earlier saved chats can still be found.
-                const oldUrlOwner = new URL(window.location.href).searchParams.get("chat_owner");
+                const oldUrlOwner =
+                    new URL(window.location.href).searchParams.get("chat_owner");
+
                 owner = oldUrlOwner || (
                     (window.crypto && crypto.randomUUID)
                         ? crypto.randomUUID()
                         : ("chat-" + Date.now().toString(36) + "-" +
                            Math.random().toString(36).slice(2))
                 );
+
                 localStorage.setItem("nature_ai_chat_owner", owner);
             }
         } catch (e) {
-            owner = "temporary-" + Math.random().toString(36).slice(2);
+            // IMPORTANT: do not create a temporary ID.
+            // A temporary ID can make old chats disappear after reopening.
+            owner = "";
         }
+
         setTriggerValue("owner", owner);
         return () => {};
     }
     """
 )
-_browser_identity = BROWSER_CHAT_ID_COMPONENT(key="nature_ai_chat_browser_identity")
+
+_browser_identity = BROWSER_CHAT_ID_COMPONENT(
+    key="nature_ai_chat_browser_identity"
+)
 _browser_owner = getattr(_browser_identity, "owner", None)
 
-# Backward-compatible fallback for older URLs/browser restrictions.
+# Fallback for an existing chat_owner URL parameter.
 try:
     _query_chat_owner = st.query_params.get("chat_owner")
 except Exception:
     _query_chat_owner = None
 
-_chat_owner = str(_browser_owner or _query_chat_owner or uuid.uuid4())
+_resolved_owner = str(
+    _browser_owner or _query_chat_owner or ""
+).strip()
+
+if _resolved_owner:
+    st.session_state["_persistent_chat_owner"] = _resolved_owner
+
+# Reuse the resolved owner during Streamlit reruns.
+_chat_owner = st.session_state.get("_persistent_chat_owner", "")
+st.session_state.chat_owner_ready = bool(_chat_owner)
 st.session_state.chat_session_id = _chat_owner
 
 if "current_chat_ids" not in st.session_state:
-    st.session_state.current_chat_ids = {"gogy": None, "titli": None}
+    st.session_state.current_chat_ids = {
+        "gogy": None,
+        "titli": None
+    }
+    
+
 
 
 def encode_chat_image(image_bytes):
@@ -187,6 +206,13 @@ def save_chat_to_supabase(character, messages, chat_id=None, custom_title=None):
     or belongs to a different browser session, create a fresh UUID rather than
     attempting to insert the conflicting ID again.
     """
+    # CHANGE 2: Do not save until the browser identity is ready.
+    if not st.session_state.get("chat_owner_ready", False):
+        return False, chat_id, (
+            "Saved-chat identity is still loading. "
+            "Refresh the app and wait for it to finish loading, then save again."
+        )
+        
     if not messages:
         return False, chat_id, "There are no messages to save yet."
 
@@ -274,6 +300,13 @@ def save_chat_to_supabase(character, messages, chat_id=None, custom_title=None):
 
 
 def get_saved_chats(character):
+    # CHANGE 3: Wait for a stable browser identity before loading history.
+    if not st.session_state.get("chat_owner_ready", False):
+        return [], (
+            "Saved-chat identity is still loading. "
+            "Refresh the app and wait a moment."
+        )
+        
     """Return saved chats for the current Streamlit session only."""
     connection = None
     try:
@@ -303,6 +336,13 @@ def get_saved_chats(character):
 
 
 def delete_chat_from_supabase(chat_id):
+    # CHANGE 4: Do not delete until the browser identity is ready.
+    if not st.session_state.get("chat_owner_ready", False):
+        return False, (
+            "Saved-chat identity is still loading. "
+            "Refresh the app and try again."
+        )
+        
     """Delete only a chat owned by the current Streamlit session."""
     connection = None
     try:
